@@ -240,7 +240,7 @@ export function createConnectionApi(host: PluginHostApi, workspaceId: string) {
     async test(form: ConnectionForm): Promise<TestResult> {
       const response = await invoke<Envelope<"result", TestResult>>("connection.test", {
         organizationUrl: normalizeOrganizationUrl(form.organizationUrl),
-        pat: form.pat.trim(),
+        pat: form.authMethod === "pat" ? form.pat.trim() : "",
       });
       return response.result ?? { ok: false };
     },

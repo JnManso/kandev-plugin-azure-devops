@@ -12,7 +12,7 @@ import (
 
 const (
 	// maxWorkItemResults bounds a search response below the 1 MiB action limit.
-	maxWorkItemResults     = 100
+	maxWorkItemResults     = 200
 	defaultPullRequestPage = 50
 	maxPullRequestPage     = 100
 	currentUserFilter      = "@me"

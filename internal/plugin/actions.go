@@ -9,7 +9,9 @@ import (
 	"github.com/kdlbs/kandev/pluginsdk"
 )
 
-const maxActionBodyBytes = 64 << 10
+// maxActionBodyBytes is the largest body any action declares (views.save);
+// the host enforces each action's own max_body_bytes from the manifest.
+const maxActionBodyBytes = 600_000
 
 func decodeBody(body []byte, target any) error {
 	if len(body) > maxActionBodyBytes {

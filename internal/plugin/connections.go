@@ -293,14 +293,20 @@ func (c *Connections) copyInto(ctx context.Context, targetWorkspaceID string, so
 	if next.AuthMethod == store.AuthMethodOAuth {
 		next.OAuthClientID = source.OAuthClientID
 	}
-	if !keepPAT {
-		next.Generation++
-		if err := c.store.DeletePAT(ctx, targetWorkspaceID); err != nil {
-			return err
-		}
-		c.discardOAuthTokens(ctx, targetWorkspaceID)
+	if keepPAT {
+		return c.store.SaveConnection(ctx, targetWorkspaceID, next)
 	}
-	return c.store.SaveConnection(ctx, targetWorkspaceID, next)
+	// The replacement is saved first, requiring sign-in, so a failed save
+	// leaves the target's credentials untouched.
+	next.Generation++
+	if err := c.store.SaveConnection(ctx, targetWorkspaceID, next); err != nil {
+		return err
+	}
+	if err := c.store.DeletePAT(ctx, targetWorkspaceID); err != nil {
+		return err
+	}
+	c.discardOAuthTokens(ctx, targetWorkspaceID)
+	return nil
 }
 
 // Delete removes the connection, its tokens, and pending sign-ins.

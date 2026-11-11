@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PluginHostApi } from "@kdlbs/plugin-sdk";
-import { createWatchesApi, emptyWatchInput, inputFromWatch, missingWatchFields, type Watch } from "./api";
+import { createWatchesApi, emptyWatchInput, inputFromWatch, missingWatchFields, withProject, type Watch } from "./api";
 import { disabledReasonText } from "./watch-settings";
 
 const watch: Watch = {
@@ -49,5 +49,13 @@ describe("watch settings", () => {
     const api = createWatchesApi({ api: { invokeAction } } as unknown as PluginHostApi, "ws-1");
     await expect(api.previewReset("w1")).resolves.toBe(4);
     expect(invokeAction).toHaveBeenCalledWith("watches.preview_reset", { workspaceId: "ws-1", body: { id: "w1" } }, { signal: undefined });
+  });
+});
+
+describe("withProject", () => {
+  it("drops the repository of the previous project", () => {
+    const input = { ...emptyWatchInput("pull_request", "Platform"), azureRepositoryId: "repo-1" };
+    expect(withProject(input, "Billing")).toMatchObject({ projectId: "Billing", azureRepositoryId: "" });
+    expect(withProject(input, "Platform")).toBe(input);
   });
 });

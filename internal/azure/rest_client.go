@@ -233,6 +233,27 @@ func (c *RESTClient) GetRepository(ctx context.Context, project, repositoryIDOrN
 	return &repository, nil
 }
 
+// BranchExists reports whether the repository has exactly this branch, using
+// a ref filter for it rather than the first page of every branch.
+func (c *RESTClient) BranchExists(ctx context.Context, projectID, repositoryID, branch string) (bool, error) {
+	var response struct {
+		Value []struct {
+			Name string `json:"name"`
+		} `json:"value"`
+	}
+	query := url.Values{"filter": {"heads/" + branch}, "api-version": {restAPIVersion}}
+	endpoint := fmt.Sprintf("/%s/_apis/git/repositories/%s/refs?%s", pathPart(projectID), pathPart(repositoryID), query.Encode())
+	if err := c.doJSON(ctx, http.MethodGet, endpoint, nil, &response); err != nil {
+		return false, err
+	}
+	for _, ref := range response.Value {
+		if ref.Name == "refs/heads/"+branch {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (c *RESTClient) ListBranches(ctx context.Context, projectID, repositoryID string) ([]Branch, error) {
 	var response struct {
 		Value []struct {
@@ -314,6 +335,7 @@ func (c *RESTClient) ListWorkItemComments(ctx context.Context, projectID string,
 			ModifiedDate *time.Time `json:"modifiedDate"`
 			CreatedBy    Identity   `json:"createdBy"`
 		} `json:"comments"`
+		ContinuationToken string `json:"continuationToken"`
 	}
 	var headers http.Header
 	if err := c.doJSONWithResponseHeaders(ctx, http.MethodGet, endpoint, nil, &response, &headers); err != nil {
@@ -338,7 +360,11 @@ func (c *RESTClient) ListWorkItemComments(ctx context.Context, projectID string,
 		}
 		return comments[i].PublishedAt.After(*comments[j].PublishedAt)
 	})
-	return &WorkItemCommentPage{Comments: comments, ContinuationToken: headers.Get("x-ms-continuationtoken")}, nil
+	token := response.ContinuationToken
+	if token == "" {
+		token = headers.Get("x-ms-continuationtoken")
+	}
+	return &WorkItemCommentPage{Comments: comments, ContinuationToken: token}, nil
 }
 
 func (c *RESTClient) GetCurrentIdentity(ctx context.Context) (*Identity, error) {

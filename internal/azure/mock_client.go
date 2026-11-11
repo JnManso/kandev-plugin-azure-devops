@@ -299,6 +299,17 @@ func (c *MockClient) ListBranches(_ context.Context, projectID, repositoryID str
 	return []Branch{}, nil
 }
 
+// BranchExists reports the repository's default branch, the only mock branch.
+func (c *MockClient) BranchExists(ctx context.Context, projectID, repositoryID, branch string) (bool, error) {
+	branches, err := c.ListBranches(ctx, projectID, repositoryID)
+	for _, candidate := range branches {
+		if candidate.Name == branch {
+			return true, err
+		}
+	}
+	return false, err
+}
+
 var (
 	mockWIQLID        = regexp.MustCompile(`\[System\.Id\] = (\d+)`)
 	mockWIQLTitle     = regexp.MustCompile(`\[System\.Title\] CONTAINS '((?:[^']|'')*)'`)

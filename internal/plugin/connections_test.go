@@ -199,3 +199,18 @@ func TestHealthPollerProbesOnlyConfiguredWorkspaces(t *testing.T) {
 		t.Fatal("the poller recorded health for an unconfigured workspace")
 	}
 }
+
+func TestCopyKeepsTheTargetTokenWhenSavingTheCopyFails(t *testing.T) {
+	h := newHarness(t)
+	h.connect("ws-target")
+	if status, body := h.action("ws-source", "connection.save", map[string]any{"organizationUrl": "https://dev.azure.com/other", "pat": "good-pat"}); status != 200 {
+		t.Fatalf("source save status = %d body = %v", status, body)
+	}
+	h.host.FailSetState = "connection"
+	if status, _ := h.action("ws-target", "connection.copy", map[string]any{"sourceWorkspaceId": "ws-source"}); status == 200 {
+		t.Fatal("copy succeeded although the connection could not be saved")
+	}
+	if secret, _ := h.host.Secret(store.PATKey("ws-target")); secret != "good-pat" {
+		t.Fatalf("target PAT after a failed copy = %q", secret)
+	}
+}

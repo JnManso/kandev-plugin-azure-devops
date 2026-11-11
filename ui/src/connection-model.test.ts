@@ -123,6 +123,21 @@ describe("connection API", () => {
     );
   });
 
+  it("tests a Microsoft account connection without a typed PAT", async () => {
+    const { host, invokeAction } = hostWith({});
+    await createConnectionApi(host, "ws-1").test({
+      ...EMPTY_FORM,
+      authMethod: "oauth",
+      organizationUrl: "https://dev.azure.com/acme",
+      pat: "leftover",
+    });
+    expect(invokeAction).toHaveBeenCalledWith(
+      "connection.test",
+      { workspaceId: "ws-1", body: { organizationUrl: "https://dev.azure.com/acme", pat: "" } },
+      { signal: undefined },
+    );
+  });
+
   it("treats an unconfigured workspace as no connection", async () => {
     const { host } = hostWith({ "connection.get": { connection: { configured: false } } });
     await expect(createConnectionApi(host, "ws-1").get()).resolves.toBeNull();

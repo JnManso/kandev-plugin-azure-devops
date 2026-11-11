@@ -34,7 +34,7 @@ import { personPickerOptions } from "../browse/pull-request-people";
 import { SearchablePicker, type PickerOption } from "../browse/searchable-picker";
 import { ANY_OPTION } from "../browse/sprints-model";
 import { useAzureIdentity, usePullRequestPeople } from "../browse/use-pull-request-people";
-import { missingWatchFields, type Option, type WatchInput, type WatchKind, type WatchOptions } from "./api";
+import { missingWatchFields, withProject, type Option, type WatchInput, type WatchKind, type WatchOptions } from "./api";
 
 /** Select value that stands for "no value"; Radix Select rejects "". */
 const NONE = "__none__";
@@ -366,7 +366,7 @@ export function WatchEditor({ workspaceId, initial, editing, options, onClose, o
         </Alert>
       )}
       <Field label={t("project")}>
-        <OptionSelect value={input.projectId} options={projects} onChange={(value) => set("projectId", value)} testId={`azure-${input.kind}-watch-project`} />
+        <OptionSelect value={input.projectId} options={projects} onChange={(value) => setInput((previous) => withProject(previous, value))} testId={`azure-${input.kind}-watch-project`} />
       </Field>
       <QueryFields
         t={t}

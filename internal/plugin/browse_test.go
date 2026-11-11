@@ -151,3 +151,9 @@ func TestWorkspaceSettingsDefaultPatchAndReset(t *testing.T) {
 		t.Fatalf("reset = %v", reset)
 	}
 }
+
+func TestWorkItemSearchAllowsTheLargestSelectableLimit(t *testing.T) {
+	if maxWorkItemResults < 200 {
+		t.Fatalf("maxWorkItemResults = %d, but the UI and saved views offer 200", maxWorkItemResults)
+	}
+}

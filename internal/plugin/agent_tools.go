@@ -119,16 +119,11 @@ func describeRepositoryChoices(repositories []azureRepository) string {
 }
 
 func branchExists(ctx context.Context, client Client, repository azureRepository, branch string) (bool, error) {
-	branches, err := client.ListBranches(ctx, repository.ProjectID, repository.RepositoryID)
+	found, err := client.BranchExists(ctx, repository.ProjectID, repository.RepositoryID, branch)
 	if err != nil {
 		return false, browseError(err)
 	}
-	for _, candidate := range branches {
-		if trimHeads(candidate.Name) == branch {
-			return true, nil
-		}
-	}
-	return false, nil
+	return found, nil
 }
 
 // taskBaseBranch returns the base branch the task chose for a repository.

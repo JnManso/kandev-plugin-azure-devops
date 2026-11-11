@@ -14,6 +14,7 @@ type Client interface {
 	ListAllRepositories(ctx context.Context) ([]azure.Repository, error)
 	GetRepository(ctx context.Context, project, repositoryIDOrName string) (*azure.Repository, error)
 	ListBranches(ctx context.Context, projectID, repositoryID string) ([]azure.Branch, error)
+	BranchExists(ctx context.Context, projectID, repositoryID, branch string) (bool, error)
 	ListRepositories(ctx context.Context, projectID string) ([]azure.Repository, error)
 
 	QueryWIQL(ctx context.Context, projectID, wiql string, top int) (*azure.WorkItemSearchResult, error)

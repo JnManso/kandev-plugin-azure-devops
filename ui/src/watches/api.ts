@@ -98,6 +98,12 @@ export function emptyWatchInput(kind: WatchKind, projectId = ""): WatchInput {
 }
 
 /** Fields the editor must have before it can save. */
+/** The input on another project, without the previous project's repository. */
+export function withProject(input: WatchInput, projectId: string): WatchInput {
+  if (input.projectId === projectId) return input;
+  return { ...input, projectId, azureRepositoryId: "" };
+}
+
 export function missingWatchFields(input: WatchInput): string[] {
   const required: Array<keyof WatchInput> = ["projectId", "workflowId", "workflowStepId", "agentProfileId", "executorProfileId"];
   if (input.kind === "work_item") required.push("wiql");

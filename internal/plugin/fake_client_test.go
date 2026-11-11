@@ -131,6 +131,16 @@ func (c *fakeClient) ListBranches(_ context.Context, _, repositoryID string) ([]
 	return c.azure.branches[repositoryID], nil
 }
 
+func (c *fakeClient) BranchExists(ctx context.Context, projectID, repositoryID, branch string) (bool, error) {
+	branches, err := c.ListBranches(ctx, projectID, repositoryID)
+	for _, candidate := range branches {
+		if strings.TrimPrefix(candidate.Name, "refs/heads/") == branch {
+			return true, err
+		}
+	}
+	return false, err
+}
+
 // harness wires a Runtime to an in-memory Host and fake Azure.
 type harness struct {
 	t       *testing.T

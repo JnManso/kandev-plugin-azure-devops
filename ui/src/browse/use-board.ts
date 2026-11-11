@@ -99,7 +99,10 @@ function useBoardDiscovery(
   }, [projectId, workspaceId]);
 
   useEffect(() => {
-    if (!workspaceId || !projectId || !teamId) return;
+    if (!workspaceId || !projectId || !teamId) {
+      setBoardsLoading(false);
+      return;
+    }
     let cancelled = false;
     setBoardsLoading(true);
     listAzureDevOpsBoards(workspaceId, projectId, teamId)
@@ -152,7 +155,10 @@ function useBoardSnapshot(
     let cancelled = false;
     // A failed read must not leave the previous board's cards on screen.
     setSnapshot(null);
-    if (!workspaceId || !projectId || !teamId || !boardId) return;
+    if (!workspaceId || !projectId || !teamId || !boardId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     getAzureDevOpsBoardSnapshot(workspaceId, projectId, teamId, boardId)
