@@ -23,7 +23,7 @@ manifest_executables=$(awk '
 	$0 == "runtime:" { in_runtime = 1; next }
 	in_runtime && $0 == "  executables:" { in_executables = 1; next }
 	in_executables && $0 !~ /^    / { exit }
-	in_executables && /^    [[:alnum:]_-]+: "[^\"]+"$/ {
+	in_executables && /^    [[:alnum:]_-]+: "[^"]+"$/ {
 		platform = $1
 		sub(/:$/, "", platform)
 		path = $2
