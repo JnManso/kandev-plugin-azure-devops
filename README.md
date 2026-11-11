@@ -138,6 +138,8 @@ ui/src/                     frontend sources, bundled to ui/bundle.js by esbuild
 ui/e2e/                     packaged-host Playwright suite (desktop and phone)
 assets/                     marketplace icon and its notice
 scripts/                    package and release verifiers
+docs/specs/                 product requirements and system designs
+docs/plans/                 implementation plan and work orders
 ```
 
 ## Build and test
