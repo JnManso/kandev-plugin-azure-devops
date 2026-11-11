@@ -1,43 +1,23 @@
-# kandev plugin manifest — the single declarative contract between your
-# plugin and a kandev host. Everything kandev needs to install, spawn, and
-# route to your plugin is described here. Start by renaming the plugin:
-# change `id`, `display_name`, `description`, and `author` to your own.
-#
-# `id` MUST match the Go module name in go.mod and the id you pass to
-# window.registerKandevPlugin(...) in ui/bundle.js, and it is the prefix of
-# every route kandev serves for you (/api/plugins/<id>/...). Keep the three
-# in sync when you rename.
-id: "kandev-plugin-template"
-api_version: 1
-version: "0.2.0"
-display_name: "Template Plugin"
-description: "Starter template for a kandev native-UI plugin: a nav item + native route, a chat-toolbar action, backend event/webhook handling, and operator settings."
-author: "your-name-here"
-categories: ["tools"]
+# Kandev plugin manifest: the declarative contract between this plugin and a
+# Kandev host. `id` must match the Go module name, the id passed to
+# window.registerKandevPlugin in ui/src/bundle.ts, and the Makefile BIN name.
+id: "kandev-plugin-azure-devops"
+api_version: 2
+version: "0.1.0"
+# Floor of the plugin SDK this repository builds against (sdk-release.json).
+# Raised at release to the first Kandev release without the built-in
+# Azure DevOps integration.
+min_kandev_version: "0.99.0"
+display_name: "Azure DevOps"
+description: "Connect Azure DevOps Services to native Kandev repository, work item, pull request, task, and watch workflows."
+author: "JnManso"
+categories: ["connector"]
+repo_url: "https://github.com/JnManso/kandev-plugin-azure-devops"
+icon: "assets/icon.svg"
 
-# min_kandev_version is the oldest kandev release this plugin will install
-# against. A release host compares it to its own version at install time and
-# refuses the package if it is older, so an operator gets a clear error instead
-# of a plugin that loads and then fails on a missing API.
-#
-# 0.86.0 is the floor for THIS template, not a default to copy blindly: it is
-# the first release carrying the host.ui primitives, host.toast and host.utils
-# that ui/bundle.js below actually calls. Raise it when you start using a newer
-# host API; you can lower or drop it if you strip the bundle back to the
-# pre-0.86 surface (Button, Card*, Tooltip*).
-#
-# Two things worth knowing about the check. It only became load-bearing in
-# 0.86.0 — earlier hosts parsed the field and silently ignored it. And it is
-# release-only by design: a host built from a git checkout reports something
-# like "v0.87.1-27-g4705f1fd0", which is not a release version, so the gate is
-# skipped and the install succeeds whatever you put here. Don't read a
-# successful sideload onto your dev instance as proof the floor is right.
-min_kandev_version: "0.86.0"
-
-# runtime.executables maps each supported platform to the binary kandev
-# spawns as a gRPC subprocess. `make package` cross-compiles all five;
-# `make package-host` builds just the current one. The paths are relative to
-# the package root and must match what the Makefile writes into server/.
+# runtime.executables maps each supported platform to the binary Kandev spawns
+# as a gRPC subprocess. `make package` cross-compiles all five;
+# `make package-host` builds only the current one.
 runtime:
   type: binary
   executables:
@@ -47,74 +27,128 @@ runtime:
     darwin-arm64: "server/plugin-darwin-arm64"
     windows-amd64: "server/plugin-windows-amd64.exe"
 
-# capabilities gate what the host will do for you. Declare only what you use.
-#   events: WS/backend event types delivered to Plugin.OnEvent (server side).
-#   state:  enables the Host GetState/SetState/... key-value store.
-# Other capabilities exist (e.g. api_read for the Host data API) — see the
-# kandev plugin docs. Remove `events`/`state` if your plugin doesn't need them.
+# Declare only what is used. state and secrets keep the workspace connection,
+# its credential, task links, and watches; api_read lets the pollers list
+# workspaces, the Git credential handler and pull request creation verify task
+# repositories, link cleanup and watch limits read tasks, and the watch editor
+# list workflows and the profiles the plugin may launch with; api_write lets
+# watches create tasks; user_state keeps each user's browse preferences;
+# task.deleted removes a deleted task's links.
 capabilities:
-  events: ["task.created"]
   state: true
+  secrets: true
+  user_state: true
+  api_read: ["workspaces", "repositories", "tasks", "workflows", "agent_profiles", "executor_profiles"]
+  api_write: ["tasks"]
+  events: ["task.deleted"]
 
-# Git-provider plugins should opt into recipes/source-control/ as one complete
-# slice. Its provider ownership, actions, reference source, and extra Host
-# capabilities are intentionally absent here so generated plugins do not claim
-# a fake provider or permissions they do not use.
+# Browser and host actions. Bodies are untrusted and bounded; Kandev
+# authorizes the workspace and passes it as verified context.
+actions:
+  - { key: "connection.get", scope: "workspace", max_body_bytes: 1024 }
+  - { key: "connection.save", scope: "workspace", max_body_bytes: 16384 }
+  - { key: "connection.test", scope: "workspace", max_body_bytes: 16384 }
+  - { key: "connection.copy", scope: "workspace", max_body_bytes: 4096 }
+  - { key: "connection.delete", scope: "workspace", max_body_bytes: 1024 }
+  - { key: "oauth.availability", scope: "workspace", max_body_bytes: 1024 }
+  - { key: "oauth.start", scope: "workspace", max_body_bytes: 16384 }
+  - { key: "oauth.complete", scope: "workspace", max_body_bytes: 16384 }
+  - { key: "oauth.sign_out", scope: "workspace", max_body_bytes: 1024 }
+  - { key: "workspaces.describe", scope: "workspace", max_body_bytes: 16384 }
+  - { key: "projects.list", scope: "workspace", max_body_bytes: 1024 }
+  - { key: "projects.repositories", scope: "workspace", max_body_bytes: 1024 }
+  - { key: "teams.list", scope: "workspace", max_body_bytes: 1024 }
+  - { key: "teams.settings", scope: "workspace", max_body_bytes: 1024 }
+  - { key: "sprints.board", scope: "workspace", max_body_bytes: 1024 }
+  - { key: "boards.list", scope: "workspace", max_body_bytes: 1024 }
+  - { key: "boards.get", scope: "workspace", max_body_bytes: 1024 }
+  - { key: "boards.children", scope: "workspace", max_body_bytes: 16384 }
+  - { key: "boards.update_item", scope: "workspace", max_body_bytes: 4096 }
+  - { key: "work_items.search", scope: "workspace", max_body_bytes: 16384 }
+  - { key: "work_items.get", scope: "workspace", max_body_bytes: 1024 }
+  - { key: "work_items.comments", scope: "workspace", max_body_bytes: 4096 }
+  - { key: "work_items.update", scope: "workspace", max_body_bytes: 4096 }
+  - { key: "pull_requests.list", scope: "workspace", max_body_bytes: 4096 }
+  - { key: "pull_requests.people", scope: "workspace", max_body_bytes: 1024 }
+  - { key: "pull_requests.get", scope: "workspace", max_body_bytes: 1024 }
+  - { key: "pull_requests.feedback", scope: "workspace", max_body_bytes: 1024 }
+  - { key: "identity.get", scope: "workspace", max_body_bytes: 1024 }
+  - { key: "views.get", scope: "workspace", max_body_bytes: 1024 }
+  - { key: "views.save", scope: "workspace", max_body_bytes: 600000 }
+  - { key: "workspace_settings.get", scope: "workspace", max_body_bytes: 1024 }
+  - { key: "workspace_settings.patch", scope: "workspace", max_body_bytes: 262144 }
+  - { key: "repositories.list", scope: "workspace", max_body_bytes: 16384 }
+  - { key: "repositories.inspect", scope: "workspace", max_body_bytes: 16384 }
+  - { key: "repositories.branches", scope: "workspace", max_body_bytes: 16384 }
+  - { key: "task_links.workspace", scope: "workspace", max_body_bytes: 1024 }
+  - { key: "task_links.get", scope: "task", max_body_bytes: 1024 }
+  - { key: "pull_requests.link", scope: "task", max_body_bytes: 4096 }
+  - { key: "pull_requests.unlink", scope: "task", max_body_bytes: 4096 }
+  - { key: "pull_requests.create", scope: "task", max_body_bytes: 65536 }
+  - { key: "work_items.link", scope: "task", max_body_bytes: 4096 }
+  - { key: "work_items.unlink", scope: "task", max_body_bytes: 4096 }
+  - { key: "watches.list", scope: "workspace", max_body_bytes: 1024 }
+  - { key: "watches.options", scope: "workspace", max_body_bytes: 1024 }
+  - { key: "watches.create", scope: "workspace", max_body_bytes: 65536 }
+  - { key: "watches.update", scope: "workspace", max_body_bytes: 65536 }
+  - { key: "watches.delete", scope: "workspace", max_body_bytes: 1024 }
+  - { key: "watches.trigger", scope: "workspace", max_body_bytes: 1024 }
+  - { key: "watches.preview_reset", scope: "workspace", max_body_bytes: 1024 }
+  - { key: "watches.reset", scope: "workspace", max_body_bytes: 1024 }
 
-# webhooks kandev proxies to Plugin.HandleWebhook at
-# POST /api/plugins/<id>/webhooks/<key>. Delete this block if unused.
-#
-# Always spell `access` out. API v1 keeps the legacy `public` default for
-# compatibility. API v2 defaults to `authenticated`. This template remains on
-# API v1 and declares its existing public behavior explicitly.
-#
-# Pick the value deliberately; the two are for different callers:
-#   public         anonymous callers. Correct for a webhook a third party
-#                  delivers to (GitHub, Slack, Stripe) — those senders have no
-#                  kandev identity to present. Your handler owns its own
-#                  verification (signature header, shared secret in a `secret:`
-#                  config field). Body limit is capped at 4 MiB.
-#   authenticated  requires a kandev identity (session cookie or PAT). Correct
-#                  for a webhook only your own scripts or CI call. Raises the
-#                  max_body_bytes ceiling to 16 MiB.
-#
-# This example is `public` because it exists to demonstrate the external
-# delivery path — that is what makes it curl-able from anywhere with no
-# credential, which is exactly why a real public webhook must authenticate its
-# caller itself.
-#
-# If what you actually want is to call your plugin from your OWN frontend
-# bundle, neither value is right: use an `actions:` entry instead. The host
-# authenticates and authorizes those, and host.api.fetch is documented as MUST
-# NOT target a public webhook path.
-webhooks:
-  - key: "ping"
-    description: "Example inbound webhook; logs the delivery and returns 200."
-    method: "POST"
-    access: "public"
+# Repositories with provider `azure_devops`, including rows created by the
+# former built-in integration, resolve to this plugin.
+repository_providers: ["azure_devops"]
 
-# ui.bundle points at your hand-written, no-build ES module frontend half.
-# Remove this section for a backend-only plugin.
+# Composer # references. Kandev asks the plugin to authorize a selection again
+# before a message is sent.
+reference_sources:
+  - source: "azure_work_items"
+    provider: "azure_devops"
+    kind: "work_item"
+    display_name: "Azure DevOps"
+    kind_label: "Work item"
+    order: 60
+  - source: "azure_pull_requests"
+    provider: "azure_devops"
+    kind: "pull_request"
+    display_name: "Azure DevOps"
+    kind_label: "Pull request"
+    order: 61
+
+# Lets an agent in a task open and link an Azure Repos pull request without
+# the az CLI or a credential in its environment.
+agent_tools:
+  - name: "create_pull_request"
+    description: "Open an Azure Repos pull request from a branch you already pushed, and link it to the current Kandev task. Push first (git push -u origin <branch>), then pass that branch as sourceBranch. If the task has several Azure Repos repositories, pass repository as Project/Repository."
+    surfaces: ["kanban-task"]
+    input_schema:
+      type: object
+      properties:
+        title: { type: string, description: "Pull request title.", minLength: 1, maxLength: 400 }
+        description: { type: string, description: "Pull request description in Markdown.", maxLength: 30000 }
+        sourceBranch: { type: string, description: "The pushed branch to merge from.", minLength: 1, maxLength: 250 }
+        targetBranch: { type: string, description: "The branch to merge into. Defaults to the task base branch or the repository default branch.", maxLength: 250 }
+        repository: { type: string, description: "Project/Repository, required only when the task has several Azure Repos repositories.", maxLength: 300 }
+        draft: { type: boolean, description: "Open the pull request as a draft." }
+      required: ["title", "sourceBranch"]
+      additionalProperties: false
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+      open_world_hint: true
+
 ui:
   bundle: "/ui/bundle.js"
+  styles: ["/ui/plugin.css"]
 
-# config_schema declares operator-editable settings, rendered as a form at
-# Settings > Plugins > <display_name>. The plugin process reads saved values
-# through the Host GetConfig RPC (see greeting() in server/plugin.go, which
-# uses it to build the webhook reply). Fields marked `secret: true` render as
-# password inputs, are stored in kandev's encrypted vault, and are masked
-# everywhere except inside the plugin process. Delete this block if your
-# plugin has no settings.
+# Operator settings at Settings > Plugins > Azure DevOps.
 config_schema:
   type: object
   properties:
-    greeting:
+    default_oauth_client_id:
       type: string
-      title: "Greeting"
-      description: "Word the ping webhook reply starts with (empty = \"Hello\")."
-      default: "Hello"
-    api_token:
-      type: string
-      title: "API token"
-      description: "Example secret setting: masked in the UI and on the operator API, cleartext only inside the plugin process."
-      secret: true
+      title: "Default Microsoft application (client) ID"
+      description: "Microsoft Entra public client used for Microsoft sign-in when a workspace does not set its own. Leave empty to require a client ID per workspace."
+      default: ""

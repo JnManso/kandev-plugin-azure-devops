@@ -77,6 +77,7 @@ jobs:
           sparse-checkout: |
             apps/backend
             apps/packages/plugin-sdk
+            pluginsdk
 
       - name: Set up Go
         if: ${{ !inputs.dry_run }}
@@ -93,7 +94,7 @@ jobs:
           cache: npm
           cache-dependency-path: plugin/package-lock.json
 
-      - name: Install locked UI test dependencies
+      - name: Install locked UI dependencies
         if: ${{ !inputs.dry_run }}
         working-directory: plugin
         run: npm ci --ignore-scripts
@@ -194,7 +195,7 @@ jobs:
           make check-format
           make vet
           make test
-          make audit-recipes
+          make audit
           make verify-package
           PACKAGE_FILE="$(make --no-print-directory -s package-file)"
           sh scripts/verify-release-version.sh "$TAG" "$PACKAGE_FILE"
@@ -252,6 +253,7 @@ jobs:
           sparse-checkout: |
             apps/backend
             apps/packages/plugin-sdk
+            pluginsdk
 
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
@@ -266,7 +268,7 @@ jobs:
           cache: npm
           cache-dependency-path: plugin/package-lock.json
 
-      - name: Install locked UI test dependencies
+      - name: Install locked UI dependencies
         working-directory: plugin
         run: npm ci --ignore-scripts
 
@@ -283,7 +285,7 @@ jobs:
           make check-format
           make vet
           make test
-          make audit-recipes
+          make audit
           make verify-package
           PACKAGE_FILE="$(make --no-print-directory -s package-file)"
           sh scripts/verify-release-version.sh "$TAG" "$PACKAGE_FILE"

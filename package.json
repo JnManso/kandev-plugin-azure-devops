@@ -1,19 +1,24 @@
 {
-  "name": "kandev-plugin-template-contract-tests",
+  "name": "kandev-plugin-azure-devops",
   "private": true,
+  "license": "AGPL-3.0-only",
   "type": "module",
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
   },
   "scripts": {
-    "test:recipes": "vitest run recipes/source-control/ui",
-    "typecheck:recipes": "tsc --project tsconfig.recipes.json --noEmit",
-    "test:ui": "node --test tests/ui-action.test.js"
+    "build:ui": "npm run typecheck && esbuild ui/src/bundle.ts --tsconfig=ui/tsconfig.json --bundle --format=esm --target=es2022 --external:react --external:react-dom --outfile=ui/bundle.js",
+    "typecheck": "tsc --project ui/tsconfig.json --noEmit",
+    "test": "npm run build:ui && vitest run",
+    "e2e": "sh scripts/run-e2e.sh"
   },
   "devDependencies": {
-    "@kandev/plugin-sdk": "file:../kandev/apps/packages/plugin-sdk",
+    "@kdlbs/plugin-sdk": "file:../kandev/apps/packages/plugin-sdk",
+    "@playwright/test": "1.61.1",
+    "@types/node": "24.3.0",
+    "esbuild": "0.28.1",
     "typescript": "5.9.3",
-    "vitest": "4.1.11"
+    "vitest": "4.1.12"
   },
   "overrides": {
     "nanoid": "5.1.16"
