@@ -116,14 +116,14 @@ function useAzureChoices(workspaceId: string, projectId: string) {
     return () => controller.abort();
   }, [workspaceId]);
   useEffect(() => {
-    if (!projectId) {
-      setRepositories([]);
-      return undefined;
-    }
+    // The previous project's repositories are never offered for this one.
+    setRepositories([]);
+    if (!projectId) return undefined;
     const controller = new AbortController();
     createBrowseApi(currentHost(), workspaceId)
       .repositories(projectId, controller.signal)
-      .then(setRepositories, () => setRepositories([]));
+      .then((next) => !controller.signal.aborted && setRepositories(next))
+      .catch(() => undefined);
     return () => controller.abort();
   }, [workspaceId, projectId]);
   return {
