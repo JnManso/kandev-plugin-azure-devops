@@ -13,7 +13,7 @@
     "e2e": "sh scripts/run-e2e.sh"
   },
   "devDependencies": {
-    "@kdlbs/plugin-sdk": "file:../kandev/apps/packages/plugin-sdk",
+    "@kdlbs/plugin-sdk": "0.2.0",
     "@playwright/test": "1.61.1",
     "@types/node": "24.3.0",
     "esbuild": "0.28.1",

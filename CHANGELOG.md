@@ -49,6 +49,9 @@
   by name (anyone, me, or the creators and reviewers of the repository's
   recent pull requests) instead of identity IDs, in browse and in
   pull-request watches; **Me** shows the signed-in user's name.
+- Builds against the published SDKs (`pluginsdk` v0.2.0 and
+  `@kdlbs/plugin-sdk` 0.2.0) instead of a sibling checkout, with the
+  `kandev-sdk-check` compatibility check in CI; `min_kandev_version` is 0.100.0.
 - Per-workspace enable switch on the integrations card and settings header.
 - Packaged-host Playwright suite for desktop and phone (`make e2e`).
 

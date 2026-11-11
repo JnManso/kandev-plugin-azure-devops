@@ -92,28 +92,35 @@ These follow from the host contracts available to plugins today:
 
 ## Develop against the SDK
 
-The Go module `github.com/kdlbs/kandev/pluginsdk` and the npm package
-`@kdlbs/plugin-sdk` are not published yet. This repository builds against a
-sibling Kandev checkout:
+The plugin uses the published SDKs at exact versions: the Go module
+`github.com/kdlbs/kandev/pluginsdk` `v0.2.0` and the npm package
+`@kdlbs/plugin-sdk` `0.2.0`. Both require Kandev 0.100.0 or later, which is
+the `min_kandev_version` floor in `manifest.yaml`. Upgrade them together, then
+rerun the compatibility check, the tests, and a smoke test on the declared
+minimum host:
+
+```bash
+go run github.com/kdlbs/kandev/pluginsdk/cmd/kandev-sdk-check@v0.2.0 \
+  --manifest manifest.yaml --frontend-sdk node_modules/@kdlbs/plugin-sdk
+```
+
+CI, build, and release workflows run the same check after installing
+dependencies.
+
+Packaging and the packaged-host tests still use a sibling Kandev checkout for
+`cmd/plugin-pack` and the disposable host:
 
 ```text
 parent/
 ├── kandev/                        # https://github.com/kdlbs/kandev
-│   ├── pluginsdk/                 # Go SDK module
-│   ├── apps/backend/              # provides cmd/plugin-pack
-│   └── apps/packages/plugin-sdk/  # frontend SDK types
+│   └── apps/backend/              # provides cmd/plugin-pack
 └── kandev-plugin-azure-devops/    # this repository
 ```
 
-`go.mod` replaces the SDK with `../kandev/pluginsdk`, and `package.json`
-installs `@kdlbs/plugin-sdk` from `../kandev/apps/packages/plugin-sdk`. If your
-Kandev checkout has another name, a `kandev` symlink next to this repository
-works. CI, build, and release workflows check out `kdlbs/kandev` at the commit
-in `.kandev-sdk-ref`. Update that pin to an exact reviewed commit, never a
-branch.
-
-Once both SDKs are published, the plugin switches to exact published versions
-and the `kandev-sdk-check` compatibility check.
+If your Kandev checkout has another name, a `kandev` symlink next to this
+repository works. The build and release workflows check out `kdlbs/kandev` at
+the commit in `.kandev-sdk-ref` for that tooling. Update that pin to an exact
+reviewed commit, never a branch.
 
 ## Layout
 

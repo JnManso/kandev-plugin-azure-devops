@@ -7,7 +7,7 @@ version: "0.1.0"
 # Floor of the plugin SDK this repository builds against (sdk-release.json).
 # Raised at release to the first Kandev release without the built-in
 # Azure DevOps integration.
-min_kandev_version: "0.99.0"
+min_kandev_version: "0.100.0"
 display_name: "Azure DevOps"
 description: "Connect Azure DevOps Services to native Kandev repository, work item, pull request, task, and watch workflows."
 author: "JnManso"
