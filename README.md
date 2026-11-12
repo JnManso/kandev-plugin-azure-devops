@@ -175,7 +175,9 @@ make verify-package   # package and verify the archive inventory and checksums
 ```
 
 Packaging runs `cmd/plugin-pack` from the sibling Kandev backend and writes
-`kandev-plugin-azure-devops-<version>.tar.gz`.
+`kandev-plugin-azure-devops-<version>.tar.gz`. The archive carries `LICENSE`
+and `NOTICE.md` next to the manifest, and the verifier requires both with
+their checksums.
 
 ## Install into Kandev
 

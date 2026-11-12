@@ -25,6 +25,15 @@ import {
 } from "./rest-compat";
 import type { AzureDevOpsActionPreset } from "./types";
 import {
+  editListDrafts,
+  listDraftsDirty,
+  listDraftsEditable,
+  listDraftsFrom,
+  listDraftsSaveBody,
+  resetListDrafts,
+  type ListPair,
+} from "./settings-drafts";
+import {
   DEFAULT_AZURE_PULL_REQUEST_ACTIONS,
   DEFAULT_AZURE_WORK_ITEM_ACTIONS,
 } from "./workspace-defaults";
@@ -324,18 +333,18 @@ function ActionEditor({
   );
 }
 
+const DEFAULT_ACTION_LISTS: ListPair<AzureDevOpsActionPreset> = {
+  workItems: DEFAULT_AZURE_WORK_ITEM_ACTIONS,
+  pullRequests: DEFAULT_AZURE_PULL_REQUEST_ACTIONS,
+};
+
+// eslint-disable-next-line max-lines-per-function -- one owner for the load, edit, reset, and save state of the action lists.
 function useActionDrafts(workspaceId: string, t: Translate) {
-  const [workItems, setWorkItems] = useState(DEFAULT_AZURE_WORK_ITEM_ACTIONS);
-  const [pullRequests, setPullRequests] = useState(DEFAULT_AZURE_PULL_REQUEST_ACTIONS);
-  const [baseline, setBaseline] = useState({ workItems, pullRequests });
+  const [drafts, setDrafts] = useState(() => listDraftsFrom(DEFAULT_ACTION_LISTS));
+  const [baseline, setBaseline] = useState(DEFAULT_ACTION_LISTS);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [resetRequested, setResetRequested] = useState(false);
-  const dirty = useMemo(
-    () =>
-      resetRequested || JSON.stringify({ workItems, pullRequests }) !== JSON.stringify(baseline),
-    [baseline, pullRequests, resetRequested, workItems],
-  );
+  const dirty = useMemo(() => listDraftsDirty(drafts, baseline), [baseline, drafts]);
 
   useEffect(() => {
     let current = true;
@@ -344,12 +353,9 @@ function useActionDrafts(workspaceId: string, t: Translate) {
     void getAzureDevOpsWorkspaceSettings(workspaceId)
       .then((settings) => {
         if (!current) return;
-        setWorkItems(settings.workItemActions);
-        setPullRequests(settings.pullRequestActions);
-        setBaseline({
-          workItems: settings.workItemActions,
-          pullRequests: settings.pullRequestActions,
-        });
+        const stored = { workItems: settings.workItemActions, pullRequests: settings.pullRequestActions };
+        setDrafts(listDraftsFrom(stored));
+        setBaseline(stored);
       })
       .catch((error: unknown) => {
         if (!current) return;
@@ -364,39 +370,36 @@ function useActionDrafts(workspaceId: string, t: Translate) {
   }, [t, workspaceId]);
 
   const save = useCallback(async () => {
-    const response = await updateAzureDevOpsWorkspaceSettings(
-      workspaceId,
-      resetRequested
-        ? { workItemActions: null, pullRequestActions: null }
-        : { workItemActions: workItems, pullRequestActions: pullRequests },
-    );
-    setWorkItems(response.workItemActions);
-    setPullRequests(response.pullRequestActions);
-    setBaseline({
-      workItems: response.workItemActions,
-      pullRequests: response.pullRequestActions,
+    const body = listDraftsSaveBody(drafts);
+    const response = await updateAzureDevOpsWorkspaceSettings(workspaceId, {
+      workItemActions: body.workItems,
+      pullRequestActions: body.pullRequests,
     });
-    setResetRequested(false);
-  }, [pullRequests, resetRequested, workItems, workspaceId]);
-  const reset = useCallback(() => {
-    setWorkItems(DEFAULT_AZURE_WORK_ITEM_ACTIONS);
-    setPullRequests(DEFAULT_AZURE_PULL_REQUEST_ACTIONS);
-    setResetRequested(true);
-  }, []);
-  const discard = useCallback(() => {
-    setWorkItems(baseline.workItems);
-    setPullRequests(baseline.pullRequests);
-    setResetRequested(false);
-  }, [baseline]);
+    const stored = { workItems: response.workItemActions, pullRequests: response.pullRequestActions };
+    setDrafts(listDraftsFrom(stored));
+    setBaseline(stored);
+  }, [drafts, workspaceId]);
+  const reset = useCallback(() => setDrafts(resetListDrafts(DEFAULT_ACTION_LISTS)), []);
+  const discard = useCallback(() => setDrafts(listDraftsFrom(baseline)), [baseline]);
+  const setWorkItems = useCallback(
+    (values: AzureDevOpsActionPreset[]) => setDrafts((previous) => editListDrafts(previous, "workItems", values)),
+    [],
+  );
+  const setPullRequests = useCallback(
+    (values: AzureDevOpsActionPreset[]) =>
+      setDrafts((previous) => editListDrafts(previous, "pullRequests", values)),
+    [],
+  );
 
   return {
-    workItems,
-    pullRequests,
+    workItems: drafts.workItems,
+    pullRequests: drafts.pullRequests,
     setWorkItems,
     setPullRequests,
     baseline,
     loading,
     loadError,
+    editable: listDraftsEditable({ loading, loadError }),
     dirty,
     save,
     reset,
@@ -434,7 +437,7 @@ export function AzureDevOpsQuickActionsSection({ workspaceId }: { workspaceId: s
     id: `azure-devops-actions:${workspaceId}`,
     revision: JSON.stringify([drafts.workItems, drafts.pullRequests]),
     isDirty: drafts.dirty,
-    canSave: !drafts.loading && !drafts.loadError && valid,
+    canSave: drafts.editable && valid,
     invalidReason: drafts.loadError ?? (valid ? undefined : t("quickActionInvalid")),
     save,
     discard: drafts.discard,
@@ -449,7 +452,7 @@ export function AzureDevOpsQuickActionsSection({ workspaceId }: { workspaceId: s
           type="button"
           variant="outline"
           className={settingsActionClassName("w-full cursor-pointer sm:w-auto")}
-          disabled={drafts.loading || !!drafts.loadError}
+          disabled={!drafts.editable}
           onClick={drafts.reset}
         >
           <IconRefresh className="h-4 w-4" /> {t("commonReset")}
@@ -463,7 +466,7 @@ export function AzureDevOpsQuickActionsSection({ workspaceId }: { workspaceId: s
               {t("couldNotLoadQuickActions", { error: drafts.loadError })}
             </p>
           )}
-          <fieldset disabled={drafts.loading || !!drafts.loadError} className="contents">
+          <fieldset disabled={!drafts.editable} className="contents">
             <Tabs defaultValue="pull-request">
               <TabsList className="w-full sm:w-auto">
                 <TabsTrigger value="pull-request" className="flex-1 cursor-pointer sm:flex-none">

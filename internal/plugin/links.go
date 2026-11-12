@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"kandev-plugin-azure-devops/internal/store"
+	"kandev-plugin-azure-devops/internal/watches"
 )
 
 const (
@@ -23,6 +24,8 @@ const (
 // PullRequestLink associates a Kandev task with one Azure Repos pull request.
 // Identity is the repository GUID plus the pull request number.
 type PullRequestLink struct {
+	// Organization is the lowercase organization name the link was made in.
+	Organization   string    `json:"organization,omitempty"`
 	ProjectID      string    `json:"projectId"`
 	ProjectName    string    `json:"projectName,omitempty"`
 	RepositoryID   string    `json:"repositoryId"`
@@ -40,15 +43,16 @@ func (l PullRequestLink) sameAs(other PullRequestLink) bool {
 }
 
 // WorkItemLink associates a Kandev task with one Azure Boards work item. Work
-// item IDs are unique within an organization.
+// item IDs are unique within an organization, which Organization records.
 type WorkItemLink struct {
-	ProjectID  string    `json:"projectId"`
-	WorkItemID int       `json:"workItemId"`
-	Title      string    `json:"title,omitempty"`
-	URL        string    `json:"url,omitempty"`
-	State      string    `json:"state,omitempty"`
-	Type       string    `json:"type,omitempty"`
-	LinkedAt   time.Time `json:"linkedAt"`
+	Organization string    `json:"organization,omitempty"`
+	ProjectID    string    `json:"projectId"`
+	WorkItemID   int       `json:"workItemId"`
+	Title        string    `json:"title,omitempty"`
+	URL          string    `json:"url,omitempty"`
+	State        string    `json:"state,omitempty"`
+	Type         string    `json:"type,omitempty"`
+	LinkedAt     time.Time `json:"linkedAt"`
 }
 
 // WorkspaceLinks groups every link of one workspace by task.
@@ -292,6 +296,26 @@ func (l *Links) saveWorkItems(ctx context.Context, workspaceID, taskID string, l
 	}
 	if err := l.store.SaveState(ctx, workspaceID, workItemLinksKey(taskID), workItemLinkRecord{Links: links}); err != nil {
 		return fmt.Errorf("save work item links: %w", err)
+	}
+	return nil
+}
+
+// linkWatchItem links a task a watch created to the item it matched.
+func (l *Links) linkWatchItem(ctx context.Context, workspaceID, taskID string, item watches.ItemLink) error {
+	if item.PullRequestID > 0 {
+		_, err := l.AddPullRequest(ctx, workspaceID, taskID, PullRequestLink{
+			Organization: item.Organization, ProjectID: item.ProjectID, ProjectName: item.ProjectName,
+			RepositoryID: item.RepositoryID, RepositoryName: item.RepositoryName, PullRequestID: item.PullRequestID,
+			Title: item.Title, URL: item.URL, SourceBranch: item.SourceBranch, TargetBranch: item.TargetBranch,
+		})
+		return err
+	}
+	if item.WorkItemID > 0 {
+		_, err := l.AddWorkItem(ctx, workspaceID, taskID, WorkItemLink{
+			Organization: item.Organization, ProjectID: item.ProjectID, WorkItemID: item.WorkItemID,
+			Title: item.Title, URL: item.URL, State: item.State, Type: item.Type,
+		})
+		return err
 	}
 	return nil
 }

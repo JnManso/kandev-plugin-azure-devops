@@ -30,22 +30,27 @@ const (
 
 // Client is the Azure DevOps surface a watch queries.
 type Client interface {
-	QueryWIQL(ctx context.Context, projectID, wiql string, top int) (*azure.WorkItemSearchResult, error)
+	QueryWorkItemIDs(ctx context.Context, projectID, wiql string, top int) ([]int, error)
+	GetWorkItems(ctx context.Context, projectID string, ids []int) ([]azure.WorkItem, error)
 	ListPullRequests(ctx context.Context, filter azure.PullRequestFilter) (*azure.PullRequestPage, error)
 	GetCurrentIdentity(ctx context.Context) (*azure.Identity, error)
 }
 
 // Tasks is the host task API a watch uses.
 type Tasks interface {
+	List(ctx context.Context, filter pluginsdk.TaskFilter, page pluginsdk.Page) ([]pluginsdk.Task, *pluginsdk.PageInfo, error)
 	Get(ctx context.Context, id string) (*pluginsdk.Task, error)
 	Create(ctx context.Context, in pluginsdk.CreateTaskInput) (*pluginsdk.Task, error)
 }
 
-// Dependencies wires a Service to the connection and host.
+// Dependencies wires a Service to the connection and host. Client returns
+// the workspace client and its organization URL. Link links a created task
+// to its matched item; nil skips linking.
 type Dependencies struct {
 	Store      *Store
-	Client     func(ctx context.Context, workspaceID string) (Client, error)
+	Client     func(ctx context.Context, workspaceID string) (Client, string, error)
 	Tasks      func() Tasks
+	Link       func(ctx context.Context, workspaceID, taskID string, item ItemLink) error
 	Workspaces func(ctx context.Context) ([]string, error)
 	Now        func() time.Time
 }
@@ -142,7 +147,8 @@ func (s *Service) PreviewReset(ctx context.Context, workspaceID, id string) (int
 }
 
 // Reset starts a new generation, so every current match creates a task again
-// on the next poll. Existing tasks are kept.
+// on the next poll. Existing tasks are kept, and those still running keep
+// counting against the inflight limit until they stop.
 func (s *Service) Reset(ctx context.Context, workspaceID, id string) (int, error) {
 	defer s.lock(workspaceID, id)()
 	watch, err := s.deps.Store.Get(ctx, workspaceID, id)
@@ -158,18 +164,26 @@ func (s *Service) Reset(ctx context.Context, workspaceID, id string) (int, error
 	if err := s.deps.Store.Save(ctx, watch); err != nil {
 		return 0, err
 	}
-	if err := s.deps.Store.deleteReservations(ctx, workspaceID, id, watch.Generation); err != nil {
-		return 0, err
-	}
 	return len(reservations), nil
 }
 
-// Trigger polls one watch now and returns how many tasks it created.
+// Trigger polls one watch now ("Run now") and returns how many tasks it
+// created.
 func (s *Service) Trigger(ctx context.Context, workspaceID, id string) (int, error) {
+	return s.trigger(ctx, workspaceID, id, nil)
+}
+
+// trigger polls one watch under its lock. A scheduled poll passes dueAt and
+// re-checks the stored watch, so a watch disabled or polled since the poller
+// listed it is skipped.
+func (s *Service) trigger(ctx context.Context, workspaceID, id string, dueAt *time.Time) (int, error) {
 	defer s.lock(workspaceID, id)()
 	watch, err := s.deps.Store.Get(ctx, workspaceID, id)
 	if err != nil {
 		return 0, err
+	}
+	if dueAt != nil && !watch.Due(*dueAt) {
+		return 0, nil
 	}
 	created, runErr := s.run(ctx, &watch)
 	now := s.deps.Now().UTC()
@@ -186,72 +200,42 @@ func (s *Service) Trigger(ctx context.Context, workspaceID, id string) (int, err
 }
 
 func (s *Service) run(ctx context.Context, watch *Watch) (int, error) {
-	client, err := s.deps.Client(ctx, watch.WorkspaceID)
+	client, organizationURL, err := s.deps.Client(ctx, watch.WorkspaceID)
 	if err != nil {
 		return 0, fmt.Errorf("Azure DevOps is not connected: %w", err)
 	}
-	matches, err := s.matches(ctx, client, *watch)
-	if err != nil {
-		return 0, fmt.Errorf("Azure DevOps query failed: %w", err)
-	}
-	capacity, err := s.capacity(ctx, *watch)
+	bindOrganization(watch, organizationURL)
+	open, err := s.settle(ctx, *watch)
 	if err != nil {
 		return 0, err
 	}
-	created := 0
-	var failure error
-	for _, match := range matches {
-		if capacity == 0 || ctx.Err() != nil {
-			break
-		}
-		ok, err := s.createTask(ctx, watch, match)
-		if err != nil {
-			if !watch.Enabled {
-				return created, err
-			}
-			failure = err
-			continue
-		}
-		if ok {
-			created++
-			capacity--
-		}
+	capacity := -1
+	if watch.MaxInflightTasks > 0 {
+		capacity = max(watch.MaxInflightTasks-open, 0)
 	}
-	return created, failure
+	if capacity == 0 {
+		return 0, nil
+	}
+	return s.createForMatches(ctx, client, watch, capacity)
 }
 
-func (s *Service) matches(ctx context.Context, client Client, watch Watch) ([]Match, error) {
-	if watch.Kind == KindWorkItem {
-		result, err := client.QueryWIQL(ctx, watch.ProjectID, watch.WIQL, maxMatchesPerPoll)
-		if err != nil || result == nil {
-			return nil, err
-		}
-		matches := make([]Match, 0, len(result.Items))
-		for _, item := range result.Items {
-			matches = append(matches, WorkItemMatch(item))
-		}
-		return matches, nil
-	}
-	creator, err := resolveIdentity(ctx, client, watch.CreatorID)
+// bindOrganization starts a new generation when the workspace connection
+// moved to another organization, so items of the earlier organization stop
+// deduplicating unrelated items that share their number. Replacing the
+// credential within the same organization keeps the generation.
+func bindOrganization(watch *Watch, organizationURL string) {
+	organization, err := azure.OrganizationName(organizationURL)
 	if err != nil {
-		return nil, err
+		return
 	}
-	reviewer, err := resolveIdentity(ctx, client, watch.ReviewerID)
-	if err != nil {
-		return nil, err
+	organization = strings.ToLower(organization)
+	if watch.Organization == organization {
+		return
 	}
-	page, err := client.ListPullRequests(ctx, azure.PullRequestFilter{
-		ProjectID: watch.ProjectID, RepositoryID: watch.AzureRepositoryID, Status: firstNonEmpty(watch.Status, "active"),
-		CreatorID: creator, ReviewerID: reviewer, Top: maxMatchesPerPoll,
-	})
-	if err != nil || page == nil {
-		return nil, err
+	if watch.Organization != "" {
+		watch.Generation++
 	}
-	matches := make([]Match, 0, len(page.Items))
-	for _, pr := range page.Items {
-		matches = append(matches, PullRequestMatch(pr))
-	}
-	return matches, nil
+	watch.Organization = organization
 }
 
 func resolveIdentity(ctx context.Context, client Client, value string) (string, error) {
@@ -265,28 +249,6 @@ func resolveIdentity(ctx context.Context, client Client, value string) (string, 
 	return identity.ID, nil
 }
 
-// capacity is how many tasks the watch may still create; -1 is unlimited.
-func (s *Service) capacity(ctx context.Context, watch Watch) (int, error) {
-	if watch.MaxInflightTasks <= 0 {
-		return -1, nil
-	}
-	reservations, err := s.deps.Store.Reservations(ctx, watch)
-	if err != nil {
-		return 0, err
-	}
-	open := 0
-	for _, reservation := range reservations {
-		if reservation.TaskID == "" {
-			continue
-		}
-		task, err := s.deps.Tasks().Get(ctx, reservation.TaskID)
-		if err == nil && task != nil && task.ArchivedAt == nil && !terminalTaskState(task.State) {
-			open++
-		}
-	}
-	return max(watch.MaxInflightTasks-open, 0), nil
-}
-
 func terminalTaskState(state string) bool {
 	switch strings.ToUpper(state) {
 	case "COMPLETED", "FAILED", "CANCELLED":
@@ -294,33 +256,6 @@ func terminalTaskState(state string) bool {
 	default:
 		return false
 	}
-}
-
-// createTask reserves the item before creating its task, so an item creates
-// at most one task per generation, including across restarts.
-func (s *Service) createTask(ctx context.Context, watch *Watch, match Match) (bool, error) {
-	_, found, err := s.deps.Store.Reservation(ctx, *watch, match.Key)
-	if err != nil || found {
-		return false, err
-	}
-	reservation := Reservation{ItemKey: match.Key, URL: match.URL, ReservedAt: s.deps.Now().UTC()}
-	if err := s.deps.Store.SaveReservation(ctx, *watch, reservation); err != nil {
-		return false, err
-	}
-	task, err := s.deps.Tasks().Create(ctx, s.taskInput(*watch, match))
-	if err != nil {
-		_ = s.deps.Store.ReleaseReservation(ctx, *watch, match.Key)
-		if reason := launchRejection(err); reason != "" {
-			watch.Enabled, watch.DisabledReason = false, reason
-			log.Printf("azure devops: watch %s disabled: %s", watch.ID, reason)
-		}
-		return false, fmt.Errorf("task creation failed: %s", status.Convert(err).Message())
-	}
-	reservation.TaskID = task.ID
-	if err := s.deps.Store.SaveReservation(ctx, *watch, reservation); err != nil {
-		log.Printf("azure devops: watch %s: record task of %s: %v", watch.ID, match.Key, err)
-	}
-	return true, nil
 }
 
 func (s *Service) taskInput(watch Watch, match Match) pluginsdk.CreateTaskInput {
@@ -381,7 +316,7 @@ func (s *Service) PollOnce(ctx context.Context) {
 			if !watch.Due(now) {
 				continue
 			}
-			if created, err := s.Trigger(ctx, workspaceID, watch.ID); err != nil && !errors.Is(err, context.Canceled) {
+			if created, err := s.trigger(ctx, workspaceID, watch.ID, &now); err != nil && !errors.Is(err, context.Canceled) {
 				log.Printf("azure devops: watch %s: %v", watch.ID, err)
 			} else if created > 0 {
 				log.Printf("azure devops: watch %s created %d task(s)", watch.ID, created)

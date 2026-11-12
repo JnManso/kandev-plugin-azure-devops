@@ -1,7 +1,7 @@
-import { currentHost, useEffect, useMemo, useRef, useState } from "../runtime";
+import { currentHost, useCallback, useEffect, useMemo, useRef, useState } from "../runtime";
 import { createBrowseApi } from "./api";
-import { MAX_CHILD_PARENTS, childParentIds, mergeChildren, missingChildIds } from "./board-children";
-import type { AzureDevOpsChildCard } from "./types";
+import { MAX_CHILD_PARENTS, childParentIds, mergeChildren, missingChildIds, replaceChildItem } from "./board-children";
+import type { AzureDevOpsChildCard, AzureDevOpsWorkItem } from "./types";
 
 type ChildTree = {
   scope: string;
@@ -68,9 +68,18 @@ export function useBoardChildren(
       );
   }, [missingKey, projectId, scope, workspaceId]);
 
+  const mergeChild = useCallback(
+    (item: AzureDevOpsWorkItem) =>
+      setTree((previous) =>
+        previous.scope === scope ? { ...previous, byParent: replaceChildItem(previous.byParent, item) } : previous,
+      ),
+    [scope],
+  );
+
   return {
     byParent: current.byParent,
     failed: current.failed,
     truncated: parents.truncated || current.truncated,
+    mergeChild,
   };
 }

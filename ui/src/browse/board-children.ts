@@ -1,4 +1,4 @@
-import type { AzureDevOpsBoardChildren, AzureDevOpsChildCard } from "./types";
+import type { AzureDevOpsBoardChildren, AzureDevOpsChildCard, AzureDevOpsWorkItem } from "./types";
 
 /** The most cards one children read covers (the action's bound). */
 export const MAX_CHILD_PARENTS = 1000;
@@ -61,6 +61,29 @@ export function missingChildIds(
  * A copy of the children index with a level's response merged in; requested
  * items missing from the response have no children.
  */
+/**
+ * Replaces a child the user changed, for example from its detail dialog,
+ * wherever it is listed, keeping what only the child list knows.
+ */
+export function replaceChildItem(
+  byParent: Map<number, AzureDevOpsChildCard[]>,
+  item: AzureDevOpsWorkItem,
+): Map<number, AzureDevOpsChildCard[]> {
+  let changed = false;
+  const replaced = new Map<number, AzureDevOpsChildCard[]>();
+  for (const [parentId, children] of byParent) {
+    replaced.set(
+      parentId,
+      children.map((child) => {
+        if (child.id !== item.id) return child;
+        changed = true;
+        return { ...child, ...item, stateCategory: child.stateCategory };
+      }),
+    );
+  }
+  return changed ? replaced : byParent;
+}
+
 export function mergeChildren(
   byParent: Map<number, AzureDevOpsChildCard[]>,
   requestedIds: number[],

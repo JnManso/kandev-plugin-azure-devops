@@ -24,26 +24,53 @@ export function pickOption(options: Option[], current: string, remembered: strin
   return options[0]?.id ?? "";
 }
 
+/** How long a successful shared request is reused. */
+export const REQUEST_CACHE_TTL_MS = 5 * 60 * 1000;
+
+type RequestCache = { clear(): void };
+
+const requestCaches = new Set<RequestCache>();
+
 /**
- * Shares one request per key (for example workspace and project) for the page
- * session; a failed request is forgotten so the next one retries.
+ * Shares one request per key (for example workspace and project) for a
+ * bounded time; a failed request is forgotten so the next one retries. The
+ * browse page clears every cache when it opens and when the connected
+ * organization changes, so a new sign-in never reads the previous account's
+ * identity, teams, or sprint settings.
  */
-export function createRequestCache<V>(fetchValue: (...keys: string[]) => Promise<V>) {
-  const entries = new Map<string, Promise<V>>();
-  return {
+export function createRequestCache<V>(
+  fetchValue: (...keys: string[]) => Promise<V>,
+  options: { ttlMs?: number; now?: () => number } = {},
+) {
+  const ttlMs = options.ttlMs ?? REQUEST_CACHE_TTL_MS;
+  const now = options.now ?? Date.now;
+  const entries = new Map<string, { value: Promise<V>; expiresAt: number }>();
+  const cache = {
     get(...keys: string[]): Promise<V> {
       const key = JSON.stringify(keys);
-      let entry = entries.get(key);
-      if (!entry) {
-        entry = fetchValue(...keys).catch((cause: unknown) => {
-          entries.delete(key);
+      const existing = entries.get(key);
+      if (existing && existing.expiresAt > now()) return existing.value;
+      const entry = {
+        value: fetchValue(...keys).catch((cause: unknown) => {
+          if (entries.get(key) === entry) entries.delete(key);
           throw cause;
-        });
-        entries.set(key, entry);
-      }
-      return entry;
+        }),
+        expiresAt: now() + ttlMs,
+      };
+      entries.set(key, entry);
+      return entry.value;
+    },
+    clear() {
+      entries.clear();
     },
   };
+  requestCaches.add(cache);
+  return cache;
+}
+
+/** Forgets every shared request, so the next reads go to Azure DevOps. */
+export function clearRequestCaches(): void {
+  for (const cache of requestCaches) cache.clear();
 }
 
 /** The Board preference for the open team and board, with their labels. */

@@ -13,6 +13,8 @@ import {
   type AzureDevOpsFiltersState,
 } from "./filters";
 import { pullRequestSearchQuery, repositoryForProject, workItemSearchWiql } from "./search-query";
+import { createSearchSequence, settleScopedSearch } from "./search-sequence";
+import { clearRequestCaches } from "./board-discovery";
 import { AzureDevOpsFeedbackDialog } from "./feedback-dialog";
 import {
   AzureDevOpsPullRequestResults,
@@ -368,6 +370,8 @@ function useAzureSearch({
   setSkip: (skip: number) => void;
   setMobileFiltersOpen: (open: boolean) => void;
 }) {
+  const [sequence] = useState(createSearchSequence);
+  useEffect(() => () => sequence.retire(), [sequence]);
   return useCallback(
     (
       nextSkip: number = 0,
@@ -376,8 +380,11 @@ function useAzureSearch({
       setMobileFiltersOpen(false);
       const searchMode = override?.mode ?? mode;
       const searchFilters = override?.filters ?? filters;
+      const isCurrent = sequence.begin();
       if (searchMode === WORK_ITEMS_MODE) {
-        void scopedWorkItemWiql(workspaceId, searchFilters).then(
+        void settleScopedSearch(
+          scopedWorkItemWiql(workspaceId, searchFilters),
+          isCurrent,
           (wiql) => workItems.search({ project: searchFilters.projectId, wiql, top: searchFilters.top }),
           (error: unknown) =>
             currentHost().toast.error(error instanceof Error ? error.message : String(error)),
@@ -388,8 +395,17 @@ function useAzureSearch({
       setSkip(nextSkip);
       void pullRequests.search(pullRequestSearchQuery(searchFilters, nextSkip, PAGE_SIZE));
     },
-    [filters, mode, pullRequests, setMobileFiltersOpen, setSkip, workItems, workspaceId],
+    [filters, mode, pullRequests, sequence, setMobileFiltersOpen, setSkip, workItems, workspaceId],
   );
+}
+
+/** Forgets shared reads when the connected organization changes. */
+function useClearCachesOnOrganizationChange(organizationUrl: string | undefined) {
+  const previous = useRef(organizationUrl);
+  useEffect(() => {
+    if (organizationUrl && previous.current && previous.current !== organizationUrl) clearRequestCaches();
+    if (organizationUrl) previous.current = organizationUrl;
+  }, [organizationUrl]);
 }
 
 // eslint-disable-next-line max-lines-per-function -- this hook coordinates the page's persisted filters and browse modes.
@@ -400,6 +416,7 @@ function useAzureDevOpsPageState(workspaceId?: string) {
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [skip, setSkip] = useState(0);
   const connection = useAzureDevOpsConnection(workspaceId);
+  useClearCachesOnOrganizationChange(connection.data?.organizationUrl);
   const projectList = useAzureDevOpsProjects(workspaceId ?? "", !!connection.data?.hasSecret);
   const { filters, update, replace } = useBrowseFilters(
     connection.data?.defaultProjectId || projectList.data[0]?.id,
@@ -755,6 +772,9 @@ function AzureDevOpsPageContent({ workspaceId }: PageProps) {
 
 /** The /azure-devops route for the active workspace. */
 export function AzureDevOpsPage() {
+  // Each visit reads identity, teams, and sprint settings again: the
+  // connection may have been signed in to another account meanwhile.
+  useState(clearRequestCaches);
   const [workspaceId, setWorkspaceId] = useState(() => currentHost().context.getActiveWorkspaceId());
   useEffect(() => currentHost().context.subscribeActiveWorkspace(setWorkspaceId), []);
   return <AzureDevOpsPageContent key={workspaceId ?? ""} workspaceId={workspaceId} />;

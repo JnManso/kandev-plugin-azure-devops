@@ -77,6 +77,22 @@ func TestSelectRepositoryRequiresAChoiceForSeveralRepositories(t *testing.T) {
 	}
 }
 
+func TestSelectRepositoryRejectsANameSharedByTwoProjects(t *testing.T) {
+	repositories := []azureRepository{
+		{ProjectName: "ProjectA", RepositoryName: "api", RepositoryID: "guid-a"},
+		{ProjectName: "ProjectB", RepositoryName: "api", RepositoryID: "guid-b"},
+	}
+	if _, err := selectRepository(repositories, "api"); err == nil || !strings.Contains(err.Error(), "ProjectA/api, ProjectB/api") {
+		t.Fatalf("ambiguous name err = %v", err)
+	}
+	if selected, err := selectRepository(repositories, "ProjectB/api"); err != nil || selected.RepositoryID != "guid-b" {
+		t.Fatalf("qualified name = %+v, %v", selected, err)
+	}
+	if selected, err := selectRepository(repositories, "GUID-A"); err != nil || selected.RepositoryID != "guid-a" {
+		t.Fatalf("repository GUID = %+v, %v", selected, err)
+	}
+}
+
 func TestUnknownAgentToolIsAnError(t *testing.T) {
 	h := linksHarness(t)
 	result, err := h.runtime.InvokeAgentTool(context.Background(), &pluginsdk.AgentToolRequest{Name: "other"})

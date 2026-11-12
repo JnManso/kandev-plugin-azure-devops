@@ -408,6 +408,7 @@ function useChildPresentation(
     childCardsFor,
     detail,
     setDetail,
+    mergeChild: children.mergeChild,
   };
 }
 
@@ -610,6 +611,7 @@ export function AzureDevOpsBoard({
             workspaceId={workspaceId}
             projectId={projectId}
             initialItem={childPresentation.detail}
+            onItemUpdated={childPresentation.mergeChild}
             onOpenChange={(open) => !open && childPresentation.setDetail(null)}
             quickActions={quickActions}
             onStartTask={onStartTask}

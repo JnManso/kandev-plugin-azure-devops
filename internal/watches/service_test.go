@@ -22,6 +22,9 @@ import (
 type memoryState struct {
 	mu     sync.Mutex
 	values map[string]string
+	// failSave and failDelete inject write failures for matching keys.
+	failSave   func(key string, value any) error
+	failDelete func(key string) error
 }
 
 func (m *memoryState) LoadState(_ context.Context, workspaceID, key string, target any) (bool, error) {
@@ -35,6 +38,11 @@ func (m *memoryState) LoadState(_ context.Context, workspaceID, key string, targ
 }
 
 func (m *memoryState) SaveState(_ context.Context, workspaceID, key string, value any) error {
+	if m.failSave != nil {
+		if err := m.failSave(key, value); err != nil {
+			return err
+		}
+	}
 	encoded, err := json.Marshal(value)
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -43,6 +51,11 @@ func (m *memoryState) SaveState(_ context.Context, workspaceID, key string, valu
 }
 
 func (m *memoryState) DeleteState(_ context.Context, workspaceID, key string) error {
+	if m.failDelete != nil {
+		if err := m.failDelete(key); err != nil {
+			return err
+		}
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.values, workspaceID+"|"+key)
@@ -66,15 +79,42 @@ type fakeClient struct {
 	items []azure.WorkItem
 	prs   []azure.PullRequest
 	last  azure.PullRequestFilter
+	// hydrated counts the work items read by ID.
+	hydrated int
 }
 
-func (c *fakeClient) QueryWIQL(context.Context, string, string, int) (*azure.WorkItemSearchResult, error) {
-	return &azure.WorkItemSearchResult{Items: c.items}, nil
+func (c *fakeClient) QueryWorkItemIDs(_ context.Context, _, _ string, top int) ([]int, error) {
+	ids := []int{}
+	for _, item := range c.items {
+		if len(ids) == top {
+			break
+		}
+		ids = append(ids, item.ID)
+	}
+	return ids, nil
+}
+
+func (c *fakeClient) GetWorkItems(_ context.Context, _ string, ids []int) ([]azure.WorkItem, error) {
+	items := []azure.WorkItem{}
+	for _, id := range ids {
+		for _, item := range c.items {
+			if item.ID == id {
+				items = append(items, item)
+			}
+		}
+	}
+	c.hydrated += len(items)
+	return items, nil
 }
 
 func (c *fakeClient) ListPullRequests(_ context.Context, filter azure.PullRequestFilter) (*azure.PullRequestPage, error) {
 	c.last = filter
-	return &azure.PullRequestPage{Items: c.prs}, nil
+	start := min(filter.Skip, len(c.prs))
+	end := len(c.prs)
+	if filter.Top > 0 {
+		end = min(start+filter.Top, len(c.prs))
+	}
+	return &azure.PullRequestPage{Items: c.prs[start:end]}, nil
 }
 
 func (c *fakeClient) GetCurrentIdentity(context.Context) (*azure.Identity, error) {
@@ -86,11 +126,32 @@ type fakeTasks struct {
 	created []pluginsdk.CreateTaskInput
 	states  map[string]string
 	fail    error
+	// failAfterCreate makes Create store the task, then fail like a lost
+	// response.
+	failAfterCreate error
+	getFail         error
+	listFail        error
+}
+
+func (t *fakeTasks) List(_ context.Context, _ pluginsdk.TaskFilter, _ pluginsdk.Page) ([]pluginsdk.Task, *pluginsdk.PageInfo, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.listFail != nil {
+		return nil, nil, t.listFail
+	}
+	tasks := make([]pluginsdk.Task, 0, len(t.created))
+	for index, in := range t.created {
+		tasks = append(tasks, pluginsdk.Task{ID: "task-" + strconv.Itoa(index+1), Metadata: in.Metadata})
+	}
+	return tasks, &pluginsdk.PageInfo{}, nil
 }
 
 func (t *fakeTasks) Get(_ context.Context, id string) (*pluginsdk.Task, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if t.getFail != nil {
+		return nil, t.getFail
+	}
 	state, ok := t.states[id]
 	if !ok {
 		return nil, status.Error(codes.NotFound, "task not found")
@@ -110,15 +171,21 @@ func (t *fakeTasks) Create(_ context.Context, in pluginsdk.CreateTaskInput) (*pl
 	t.created = append(t.created, in)
 	id := "task-" + strconv.Itoa(len(t.created))
 	t.states[id] = "IN_PROGRESS"
+	if t.failAfterCreate != nil {
+		return nil, t.failAfterCreate
+	}
 	return &pluginsdk.Task{ID: id}, nil
 }
 
 type fixture struct {
-	service *Service
-	state   *memoryState
-	client  *fakeClient
-	tasks   *fakeTasks
-	now     time.Time
+	service      *Service
+	state        *memoryState
+	client       *fakeClient
+	tasks        *fakeTasks
+	now          time.Time
+	organization string
+	linked       []ItemLink
+	linkFail     error
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -128,11 +195,20 @@ func newFixture(t *testing.T) *fixture {
 		client: &fakeClient{items: []azure.WorkItem{{ID: 1, Title: "One", Project: "Platform"}, {ID: 2, Title: "Two", Project: "Platform"}}},
 		tasks:  &fakeTasks{states: map[string]string{}},
 		now:    time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC),
+
+		organization: "https://dev.azure.com/contoso",
 	}
 	f.service = NewService(Dependencies{
-		Store:      NewStore(f.state, f.state.keys),
-		Client:     func(context.Context, string) (Client, error) { return f.client, nil },
-		Tasks:      func() Tasks { return f.tasks },
+		Store:  NewStore(f.state, f.state.keys),
+		Client: func(context.Context, string) (Client, string, error) { return f.client, f.organization, nil },
+		Tasks:  func() Tasks { return f.tasks },
+		Link: func(_ context.Context, _, _ string, item ItemLink) error {
+			if f.linkFail != nil {
+				return f.linkFail
+			}
+			f.linked = append(f.linked, item)
+			return nil
+		},
 		Workspaces: func(context.Context) ([]string, error) { return []string{"ws-1"}, nil },
 		Now:        func() time.Time { return f.now },
 	})

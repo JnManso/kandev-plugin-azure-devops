@@ -147,13 +147,16 @@ func mentionProjects(ctx context.Context, client Client, defaultID, defaultName 
 	return filtered, nil
 }
 
+// mentionWIQL scopes the query to the project in the request URL with
+// @project; the project context alone does not filter WIQL results.
 func mentionWIQL(query string) string {
+	const scoped = "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project AND "
 	if id, ok := positiveID(strings.TrimPrefix(query, "#")); ok {
-		return "SELECT [System.Id] FROM WorkItems WHERE [System.Id] = " + strconv.Itoa(id)
+		return scoped + "[System.Id] = " + strconv.Itoa(id)
 	}
 	query = strings.NewReplacer("\r", " ", "\n", " ", "\t", " ").Replace(query)
 	query = strings.ReplaceAll(query, "'", "''")
-	return "SELECT [System.Id] FROM WorkItems WHERE [System.Title] CONTAINS '" + query + "' ORDER BY [System.ChangedDate] DESC"
+	return scoped + "[System.Title] CONTAINS '" + query + "' ORDER BY [System.ChangedDate] DESC"
 }
 
 func searchWorkItemMentions(ctx context.Context, client Client, projects []azure.Project, query string, limit int) ([]pluginsdk.EntityReferenceCandidate, error) {

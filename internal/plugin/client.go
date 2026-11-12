@@ -18,6 +18,8 @@ type Client interface {
 	ListRepositories(ctx context.Context, projectID string) ([]azure.Repository, error)
 
 	QueryWIQL(ctx context.Context, projectID, wiql string, top int) (*azure.WorkItemSearchResult, error)
+	QueryWorkItemIDs(ctx context.Context, projectID, wiql string, top int) ([]int, error)
+	GetWorkItems(ctx context.Context, projectID string, ids []int) ([]azure.WorkItem, error)
 	GetWorkItemDetail(ctx context.Context, projectID string, id int) (*azure.WorkItemDetail, error)
 	ListWorkItemComments(ctx context.Context, projectID string, id int, continuationToken string) (*azure.WorkItemCommentPage, error)
 	UpdateWorkItem(ctx context.Context, projectID string, id int, request azure.WorkItemAssignmentRequest) (*azure.WorkItem, error)

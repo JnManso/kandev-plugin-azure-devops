@@ -22,6 +22,9 @@ const (
 	DefaultPollIntervalSeconds = 300
 	MinPollIntervalSeconds     = 60
 	maxMatchesPerPoll          = 100
+	// maxWatchCandidates bounds how far one poll reads past items the watch
+	// already handled.
+	maxWatchCandidates = 2000
 
 	// Disabled reasons shown, translated, in settings.
 	ReasonAgentProfileUnavailable    = "agent_profile_unavailable"
@@ -37,32 +40,37 @@ var (
 
 // Watch is one persisted work-item or pull-request watch.
 type Watch struct {
-	ID                  string     `json:"id"`
-	Kind                Kind       `json:"kind"`
-	WorkspaceID         string     `json:"workspaceId"`
-	WorkflowID          string     `json:"workflowId"`
-	WorkflowStepID      string     `json:"workflowStepId"`
-	ProjectID           string     `json:"projectId"`
-	WIQL                string     `json:"wiql,omitempty"`
-	AzureRepositoryID   string     `json:"azureRepositoryId,omitempty"`
-	Status              string     `json:"status,omitempty"`
-	CreatorID           string     `json:"creatorId,omitempty"`
-	ReviewerID          string     `json:"reviewerId,omitempty"`
-	RepositoryID        string     `json:"repositoryId,omitempty"`
-	BaseBranch          string     `json:"baseBranch,omitempty"`
-	AgentProfileID      string     `json:"agentProfileId"`
-	ExecutorProfileID   string     `json:"executorProfileId"`
-	Prompt              string     `json:"prompt"`
-	Enabled             bool       `json:"enabled"`
-	PollIntervalSeconds int        `json:"pollIntervalSeconds"`
-	MaxInflightTasks    int        `json:"maxInflightTasks,omitempty"`
-	Generation          int64      `json:"generation"`
-	DisabledReason      string     `json:"disabledReason,omitempty"`
-	LastError           string     `json:"lastError,omitempty"`
-	LastErrorAt         *time.Time `json:"lastErrorAt,omitempty"`
-	LastPolledAt        *time.Time `json:"lastPolledAt,omitempty"`
-	CreatedAt           time.Time  `json:"createdAt"`
-	UpdatedAt           time.Time  `json:"updatedAt"`
+	ID                  string `json:"id"`
+	Kind                Kind   `json:"kind"`
+	WorkspaceID         string `json:"workspaceId"`
+	WorkflowID          string `json:"workflowId"`
+	WorkflowStepID      string `json:"workflowStepId"`
+	ProjectID           string `json:"projectId"`
+	WIQL                string `json:"wiql,omitempty"`
+	AzureRepositoryID   string `json:"azureRepositoryId,omitempty"`
+	Status              string `json:"status,omitempty"`
+	CreatorID           string `json:"creatorId,omitempty"`
+	ReviewerID          string `json:"reviewerId,omitempty"`
+	RepositoryID        string `json:"repositoryId,omitempty"`
+	BaseBranch          string `json:"baseBranch,omitempty"`
+	AgentProfileID      string `json:"agentProfileId"`
+	ExecutorProfileID   string `json:"executorProfileId"`
+	Prompt              string `json:"prompt"`
+	Enabled             bool   `json:"enabled"`
+	PollIntervalSeconds int    `json:"pollIntervalSeconds"`
+	MaxInflightTasks    int    `json:"maxInflightTasks,omitempty"`
+	Generation          int64  `json:"generation"`
+	// Organization is the lowercase organization the current generation's
+	// reservations belong to. Connecting the workspace to another
+	// organization starts a new generation, because work item numbers are
+	// unique only within an organization.
+	Organization   string     `json:"organization,omitempty"`
+	DisabledReason string     `json:"disabledReason,omitempty"`
+	LastError      string     `json:"lastError,omitempty"`
+	LastErrorAt    *time.Time `json:"lastErrorAt,omitempty"`
+	LastPolledAt   *time.Time `json:"lastPolledAt,omitempty"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	UpdatedAt      time.Time  `json:"updatedAt"`
 }
 
 // Input is the editable part of a watch. Nil fields keep their value on update.
@@ -186,10 +194,47 @@ type Match struct {
 	PullRequest *azure.PullRequest
 }
 
+// ItemLink is what a watch records about a matched item, so the created task
+// can be linked to it, including by a later poll after a failed attempt.
+// Organization is the lowercase organization name the item belongs to.
+type ItemLink struct {
+	Organization   string `json:"organization,omitempty"`
+	WorkItemID     int    `json:"workItemId,omitempty"`
+	PullRequestID  int    `json:"pullRequestId,omitempty"`
+	ProjectID      string `json:"projectId,omitempty"`
+	ProjectName    string `json:"projectName,omitempty"`
+	RepositoryID   string `json:"repositoryId,omitempty"`
+	RepositoryName string `json:"repositoryName,omitempty"`
+	Title          string `json:"title,omitempty"`
+	URL            string `json:"url,omitempty"`
+	State          string `json:"state,omitempty"`
+	Type           string `json:"type,omitempty"`
+	SourceBranch   string `json:"sourceBranch,omitempty"`
+	TargetBranch   string `json:"targetBranch,omitempty"`
+}
+
+// Link describes the match for a task link in organization.
+func (m Match) Link(organization, defaultProject string) ItemLink {
+	link := ItemLink{Organization: organization, Title: m.Title, URL: m.URL}
+	if pr := m.PullRequest; pr != nil {
+		link.PullRequestID, link.ProjectID, link.ProjectName = pr.ID, pr.ProjectID, pr.ProjectName
+		link.RepositoryID, link.RepositoryName = pr.RepositoryID, pr.RepositoryName
+		link.SourceBranch, link.TargetBranch, link.State = pr.SourceBranch, pr.TargetBranch, pr.Status
+		return link
+	}
+	if item := m.WorkItem; item != nil {
+		link.WorkItemID, link.ProjectID = item.ID, firstNonEmpty(item.Project, defaultProject)
+		link.State, link.Type = item.State, item.Type
+	}
+	return link
+}
+
 // WorkItemMatch identifies a work item; IDs are unique in an organization.
 func WorkItemMatch(item azure.WorkItem) Match {
-	return Match{Key: "wi-" + strconv.Itoa(item.ID), URL: item.WebURL, Title: item.Title, WorkItem: &item}
+	return Match{Key: workItemKey(item.ID), URL: item.WebURL, Title: item.Title, WorkItem: &item}
 }
+
+func workItemKey(id int) string { return "wi-" + strconv.Itoa(id) }
 
 // PullRequestMatch identifies a pull request by repository and number.
 func PullRequestMatch(pr azure.PullRequest) Match {

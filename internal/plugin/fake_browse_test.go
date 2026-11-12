@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"kandev-plugin-azure-devops/internal/azure"
 )
@@ -50,6 +51,29 @@ func (c *fakeClient) QueryWIQL(_ context.Context, projectID, wiql string, top in
 		items = items[:top]
 	}
 	return &azure.WorkItemSearchResult{Items: items, Count: len(items)}, nil
+}
+
+func (c *fakeClient) QueryWorkItemIDs(ctx context.Context, projectID, wiql string, top int) ([]int, error) {
+	result, err := c.QueryWIQL(ctx, projectID, wiql, top)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]int, 0, len(result.Items))
+	for _, item := range result.Items {
+		ids = append(ids, item.ID)
+	}
+	return ids, nil
+}
+
+func (c *fakeClient) GetWorkItems(_ context.Context, _ string, ids []int) ([]azure.WorkItem, error) {
+	if err := c.authorize(); err != nil {
+		return nil, err
+	}
+	items := make([]azure.WorkItem, 0, len(ids))
+	for _, id := range ids {
+		items = append(items, boardItem(id, "Work item "+strconv.Itoa(id), "").WorkItem)
+	}
+	return items, nil
 }
 
 func (c *fakeClient) GetWorkItemDetail(_ context.Context, _ string, id int) (*azure.WorkItemDetail, error) {

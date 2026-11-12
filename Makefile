@@ -55,13 +55,13 @@ vet:
 	go vet ./...
 
 ## Cross-compile server/plugin-<goos>-<goarch>[.exe] for every platform in
-## manifest.yaml's runtime.executables, stage manifest.yaml, assets/, and the
-## built UI next to them, and pack the tree into $(PKG_OUT) with Kandev's
+## manifest.yaml's runtime.executables, stage manifest.yaml, the license and
+## notices, assets/, and the built UI next to them, and pack the tree into $(PKG_OUT) with Kandev's
 ## cmd/plugin-pack.
 package: build-ui
 	rm -rf $(STAGE)
 	mkdir -p $(STAGE)/server $(STAGE)/ui
-	cp manifest.yaml $(STAGE)/manifest.yaml
+	cp manifest.yaml LICENSE NOTICE.md $(STAGE)/
 	cp -r assets $(STAGE)/assets
 	cp ui/bundle.js ui/plugin.css $(STAGE)/ui/
 	GOOS=linux   GOARCH=amd64 go build -o $(STAGE)/server/plugin-linux-amd64       ./server
@@ -77,7 +77,7 @@ package: build-ui
 package-host: build-ui
 	rm -rf $(STAGE)
 	mkdir -p $(STAGE)/server $(STAGE)/ui
-	cp manifest.yaml $(STAGE)/manifest.yaml
+	cp manifest.yaml LICENSE NOTICE.md $(STAGE)/
 	cp -r assets $(STAGE)/assets
 	cp ui/bundle.js ui/plugin.css $(STAGE)/ui/
 	go build -o $(STAGE)/server/plugin-$$(go env GOOS)-$$(go env GOARCH)$$(go env GOEXE) ./server

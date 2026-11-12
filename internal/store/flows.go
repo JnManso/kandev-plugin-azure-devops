@@ -24,6 +24,11 @@ type Flow struct {
 	PKCEVerifier       string    `json:"pkceVerifier"`
 	RedirectURL        string    `json:"redirectUrl"`
 	ExpiresAt          time.Time `json:"expiresAt"`
+	// ConnectionFound and ConnectionGeneration record the workspace
+	// connection when the sign-in started; completing it after the
+	// connection changed is rejected.
+	ConnectionFound      bool  `json:"connectionFound,omitempty"`
+	ConnectionGeneration int64 `json:"connectionGeneration,omitempty"`
 }
 
 // Flows stores pending sign-ins in workspace state. Claims are serialized in

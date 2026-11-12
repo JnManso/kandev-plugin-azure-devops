@@ -24,6 +24,15 @@ import {
 } from "./rest-compat";
 import type { AzureDevOpsQueryPreset } from "./types";
 import {
+  editListDrafts,
+  listDraftsDirty,
+  listDraftsEditable,
+  listDraftsFrom,
+  listDraftsSaveBody,
+  resetListDrafts,
+  type ListPair,
+} from "./settings-drafts";
+import {
   DEFAULT_AZURE_PULL_REQUEST_QUERIES,
   DEFAULT_AZURE_WORK_ITEM_QUERIES,
 } from "./workspace-defaults";
@@ -360,70 +369,72 @@ function QueryEditor({
   );
 }
 
-function useQueryDrafts(workspaceId: string) {
-  const [workItems, setWorkItems] = useState(DEFAULT_AZURE_WORK_ITEM_QUERIES);
-  const [pullRequests, setPullRequests] = useState(DEFAULT_AZURE_PULL_REQUEST_QUERIES);
-  const [baseline, setBaseline] = useState({ workItems, pullRequests });
+type Translate = ReturnType<typeof useT>;
+
+const DEFAULT_QUERY_LISTS: ListPair<AzureDevOpsQueryPreset> = {
+  workItems: DEFAULT_AZURE_WORK_ITEM_QUERIES,
+  pullRequests: DEFAULT_AZURE_PULL_REQUEST_QUERIES,
+};
+
+// eslint-disable-next-line max-lines-per-function -- one owner for the load, edit, reset, and save state of the query lists.
+function useQueryDrafts(workspaceId: string, t: Translate) {
+  const [drafts, setDrafts] = useState(() => listDraftsFrom(DEFAULT_QUERY_LISTS));
+  const [baseline, setBaseline] = useState(DEFAULT_QUERY_LISTS);
   const [loading, setLoading] = useState(true);
-  const [resetRequested, setResetRequested] = useState(false);
-  const dirty = useMemo(
-    () =>
-      resetRequested || JSON.stringify({ workItems, pullRequests }) !== JSON.stringify(baseline),
-    [baseline, pullRequests, resetRequested, workItems],
-  );
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const dirty = useMemo(() => listDraftsDirty(drafts, baseline), [baseline, drafts]);
 
   useEffect(() => {
     let current = true;
+    setLoading(true);
+    setLoadError(null);
     void getAzureDevOpsWorkspaceSettings(workspaceId)
       .then((settings) => {
         if (!current) return;
-        setWorkItems(settings.workItemQueries);
-        setPullRequests(settings.pullRequestQueries);
-        setBaseline({
-          workItems: settings.workItemQueries,
-          pullRequests: settings.pullRequestQueries,
-        });
+        const stored = { workItems: settings.workItemQueries, pullRequests: settings.pullRequestQueries };
+        setDrafts(listDraftsFrom(stored));
+        setBaseline(stored);
       })
-      .catch(() => undefined)
+      .catch((error: unknown) => {
+        if (!current) return;
+        setLoadError(error instanceof Error ? error.message : t("failedToLoadDefaultQueries"));
+      })
       .finally(() => current && setLoading(false));
     return () => {
       current = false;
     };
-  }, [workspaceId]);
+  }, [t, workspaceId]);
 
   const save = useCallback(async () => {
-    const response = await updateAzureDevOpsWorkspaceSettings(
-      workspaceId,
-      resetRequested
-        ? { pullRequestQueries: null, workItemQueries: null }
-        : { pullRequestQueries: pullRequests, workItemQueries: workItems },
-    );
-    setWorkItems(response.workItemQueries);
-    setPullRequests(response.pullRequestQueries);
-    setBaseline({
-      workItems: response.workItemQueries,
-      pullRequests: response.pullRequestQueries,
+    const body = listDraftsSaveBody(drafts);
+    const response = await updateAzureDevOpsWorkspaceSettings(workspaceId, {
+      pullRequestQueries: body.pullRequests,
+      workItemQueries: body.workItems,
     });
-    setResetRequested(false);
-  }, [pullRequests, resetRequested, workItems, workspaceId]);
-  const reset = useCallback(() => {
-    setWorkItems(DEFAULT_AZURE_WORK_ITEM_QUERIES);
-    setPullRequests(DEFAULT_AZURE_PULL_REQUEST_QUERIES);
-    setResetRequested(true);
-  }, []);
-  const discard = useCallback(() => {
-    setWorkItems(baseline.workItems);
-    setPullRequests(baseline.pullRequests);
-    setResetRequested(false);
-  }, [baseline]);
+    const stored = { workItems: response.workItemQueries, pullRequests: response.pullRequestQueries };
+    setDrafts(listDraftsFrom(stored));
+    setBaseline(stored);
+  }, [drafts, workspaceId]);
+  const reset = useCallback(() => setDrafts(resetListDrafts(DEFAULT_QUERY_LISTS)), []);
+  const discard = useCallback(() => setDrafts(listDraftsFrom(baseline)), [baseline]);
+  const setWorkItems = useCallback(
+    (values: AzureDevOpsQueryPreset[]) => setDrafts((previous) => editListDrafts(previous, "workItems", values)),
+    [],
+  );
+  const setPullRequests = useCallback(
+    (values: AzureDevOpsQueryPreset[]) => setDrafts((previous) => editListDrafts(previous, "pullRequests", values)),
+    [],
+  );
 
   return {
-    workItems,
-    pullRequests,
+    workItems: drafts.workItems,
+    pullRequests: drafts.pullRequests,
     setWorkItems,
     setPullRequests,
     baseline,
     loading,
+    loadError,
+    editable: listDraftsEditable({ loading, loadError }),
     dirty,
     save,
     reset,
@@ -446,7 +457,7 @@ function validQueries(queries: AzureDevOpsQueryPreset[], kind: QueryKind): boole
 
 export function AzureDevOpsDefaultQueriesSection({ workspaceId }: { workspaceId: string }) {
   const t = useT();
-  const drafts = useQueryDrafts(workspaceId);
+  const drafts = useQueryDrafts(workspaceId, t);
   const { toast } = useToast();
   const valid =
     validQueries(drafts.pullRequests, "pull-request") &&
@@ -469,8 +480,8 @@ export function AzureDevOpsDefaultQueriesSection({ workspaceId }: { workspaceId:
     id: `azure-devops-default-queries:${workspaceId}`,
     revision: JSON.stringify([drafts.pullRequests, drafts.workItems]),
     isDirty: drafts.dirty,
-    canSave: !drafts.loading && valid,
-    invalidReason: valid ? undefined : t("defaultQueryInvalid"),
+    canSave: drafts.editable && valid,
+    invalidReason: drafts.loadError ?? (valid ? undefined : t("defaultQueryInvalid")),
     save,
     discard: drafts.discard,
   });
@@ -484,7 +495,7 @@ export function AzureDevOpsDefaultQueriesSection({ workspaceId }: { workspaceId:
           type="button"
           variant="outline"
           className={settingsActionClassName("w-full cursor-pointer sm:w-auto")}
-          disabled={drafts.loading}
+          disabled={!drafts.editable}
           onClick={drafts.reset}
         >
           <IconRefresh className="h-4 w-4" /> {t("commonReset")}
@@ -493,7 +504,12 @@ export function AzureDevOpsDefaultQueriesSection({ workspaceId }: { workspaceId:
     >
       <SettingsCard isDirty={drafts.dirty} data-testid="azure-devops-default-queries-card">
         <CardContent className="pt-4 sm:pt-6">
-          <fieldset disabled={drafts.loading} className="contents">
+          {drafts.loadError && (
+            <p role="alert" className="mb-4 text-sm text-destructive">
+              {t("couldNotLoadDefaultQueries", { error: drafts.loadError })}
+            </p>
+          )}
+          <fieldset disabled={!drafts.editable} className="contents">
             <Tabs defaultValue="pull-request">
               <TabsList className="w-full sm:w-auto">
                 <TabsTrigger value="pull-request" className="flex-1 cursor-pointer sm:flex-none">

@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { boardPreferenceFor, createRequestCache, pickOption, rememberedBoardStart } from "./board-discovery";
+import {
+  boardPreferenceFor,
+  clearRequestCaches,
+  createRequestCache,
+  pickOption,
+  rememberedBoardStart,
+} from "./board-discovery";
 
 const remembered = {
   projectId: "Contoso",
@@ -68,6 +74,53 @@ describe("createRequestCache", () => {
     const cache = createRequestCache(fetchTeams);
     await expect(cache.get("ws", "p1")).rejects.toThrow("offline");
     await expect(cache.get("ws", "p1")).resolves.toEqual([{ id: "t", name: "T" }]);
+  });
+
+  it("reads again once a cached value is older than its lifetime", async () => {
+    let now = 1_000;
+    const fetchIdentity = vi
+      .fn<(workspaceId: string) => Promise<string>>()
+      .mockResolvedValueOnce("first account")
+      .mockResolvedValueOnce("second account");
+    const cache = createRequestCache(fetchIdentity, { ttlMs: 60_000, now: () => now });
+    await expect(cache.get("ws")).resolves.toBe("first account");
+    now += 59_999;
+    await expect(cache.get("ws")).resolves.toBe("first account");
+    now += 1;
+    await expect(cache.get("ws")).resolves.toBe("second account");
+    expect(fetchIdentity).toHaveBeenCalledTimes(2);
+  });
+
+  it("forgets every cached value when the caches are cleared", async () => {
+    const fetchIdentity = vi
+      .fn<(workspaceId: string) => Promise<string>>()
+      .mockResolvedValueOnce("first account")
+      .mockResolvedValueOnce("second account");
+    const fetchTeams = vi.fn(async (workspaceId: string) => [workspaceId]);
+    const identities = createRequestCache(fetchIdentity);
+    const teams = createRequestCache(fetchTeams);
+    await identities.get("ws");
+    await teams.get("ws");
+    clearRequestCaches();
+    await expect(identities.get("ws")).resolves.toBe("second account");
+    await teams.get("ws");
+    expect(fetchTeams).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a request started after a clear when the cleared one fails", async () => {
+    let rejectFirst: (cause: Error) => void = () => undefined;
+    const fetchIdentity = vi
+      .fn<(workspaceId: string) => Promise<string>>()
+      .mockImplementationOnce(() => new Promise<string>((_, reject) => (rejectFirst = reject)))
+      .mockResolvedValueOnce("second account");
+    const cache = createRequestCache(fetchIdentity);
+    const first = cache.get("ws");
+    cache.clear();
+    await expect(cache.get("ws")).resolves.toBe("second account");
+    rejectFirst(new Error("offline"));
+    await expect(first).rejects.toThrow("offline");
+    await expect(cache.get("ws")).resolves.toBe("second account");
+    expect(fetchIdentity).toHaveBeenCalledTimes(2);
   });
 });
 

@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/kdlbs/kandev/pluginsdk"
@@ -59,5 +60,17 @@ func TestAuthorizeReferencesRereadsTheItem(t *testing.T) {
 	})
 	if response.Allowed {
 		t.Fatal("a mismatched id and key was allowed")
+	}
+}
+
+func TestMentionQueriesAreScopedToTheRequestProject(t *testing.T) {
+	for _, query := range []string{"#42", "rotate it's keys"} {
+		wiql := mentionWIQL(query)
+		if !strings.Contains(wiql, "WHERE [System.TeamProject] = @project AND ") {
+			t.Fatalf("mentionWIQL(%q) = %q, want the @project predicate", query, wiql)
+		}
+	}
+	if wiql := mentionWIQL("it's"); !strings.Contains(wiql, "CONTAINS 'it''s'") {
+		t.Fatalf("title query = %q", wiql)
 	}
 }

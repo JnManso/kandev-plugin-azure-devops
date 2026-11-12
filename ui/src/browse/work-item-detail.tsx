@@ -46,6 +46,8 @@ type Props = {
   projectId: string;
   initialItem: AzureDevOpsWorkItem | null;
   boardContext?: BoardContext;
+  /** Receives the item after an assignment change outside a board card. */
+  onItemUpdated?: (item: AzureDevOpsWorkItem) => void;
   quickActions?: AzureDevOpsActionPreset[];
   onStartTask?: (item: AzureDevOpsWorkItem, action?: AzureDevOpsActionPreset) => void;
 };
@@ -220,11 +222,13 @@ function QuickActions({
 function DetailBody({
   state,
   boardContext,
+  onItemUpdated,
   quickActions,
   onStartTask,
 }: {
   state: ReturnType<typeof useAzureDevOpsWorkItemDetail>;
   boardContext?: BoardContext;
+  onItemUpdated?: (item: AzureDevOpsWorkItem) => void;
   quickActions: AzureDevOpsActionPreset[];
   onStartTask?: (item: AzureDevOpsWorkItem, action?: AzureDevOpsActionPreset) => void;
 }) {
@@ -249,6 +253,8 @@ function DetailBody({
       const updated = await state.updateAssignee(action);
       if (updated && boardContext?.onItemUpdated) {
         boardContext.onItemUpdated({ ...boardContext.item, ...updated });
+      } else if (updated) {
+        onItemUpdated?.(updated);
       }
     } catch (error) {
       if (mutation.isCurrent()) setMutationError(String(error));
@@ -422,6 +428,7 @@ export function AzureDevOpsWorkItemDetail({
   projectId,
   initialItem,
   boardContext,
+  onItemUpdated,
   quickActions = [],
   onStartTask,
 }: Props) {
@@ -477,6 +484,7 @@ export function AzureDevOpsWorkItemDetail({
       key={`${workspaceId}:${projectId}:${initialItem?.id}:${open}`}
       state={state}
       boardContext={boardContext}
+      onItemUpdated={onItemUpdated}
       quickActions={quickActions}
       onStartTask={onStartTask}
     />

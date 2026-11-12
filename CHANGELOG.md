@@ -6,6 +6,25 @@
 
 - License changed from MIT to AGPL-3.0-only, matching Kandev and its plugin
   SDKs. Template-derived portions keep their MIT notice in `NOTICE.md`.
+- Watches page past matches they already handled, link each created task to
+  its work item or pull request, and keep tasks whose create response was
+  lost or whose task ID was not saved in the inflight limit until the task is
+  found by its metadata. A reset keeps running tasks in the limit, a
+  scheduled poll skips a watch disabled after it was listed, and connecting
+  the workspace to another organization starts a new watch generation.
+- Git credentials and Microsoft account requests use only the connection that
+  was verified or that built the client; a replaced, signed-out, or deleted
+  connection is never served another connection's credential, and a
+  recreated connection never reuses a credential generation. A Microsoft
+  sign-in completed after the connection changed is rejected.
+- Pull requests created for a task attach only work items linked in the
+  connected organization, repositories recorded without a clone URL work
+  for Create PR and the agent tool, the agent tool rejects a repository name
+  shared by two projects, and mention search is scoped to each project.
+- The browse screens refresh cached teams, identities, and sprint settings,
+  keep child assignments in sync, guard the default query editor against a
+  failed load, keep edits made after Reset, and ignore a stale team-scoped
+  search. The package includes `LICENSE` and `NOTICE.md`.
 
 ### Added
 

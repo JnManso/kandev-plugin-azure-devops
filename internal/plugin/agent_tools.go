@@ -101,13 +101,21 @@ func selectRepository(repositories []azureRepository, requested string) (azureRe
 		}
 		return azureRepository{}, fmt.Errorf("this task has %d Azure Repos repositories; pass repository with one of: %s", len(repositories), describeRepositoryChoices(repositories))
 	}
+	var matches []azureRepository
 	for _, repository := range repositories {
 		if strings.EqualFold(repository.RepositoryName, requested) || strings.EqualFold(repository.RepositoryID, requested) ||
 			strings.EqualFold(repository.ProjectName+"/"+repository.RepositoryName, requested) {
-			return repository, nil
+			matches = append(matches, repository)
 		}
 	}
-	return azureRepository{}, fmt.Errorf("repository %q is not part of this task; use one of: %s", requested, describeRepositoryChoices(repositories))
+	switch len(matches) {
+	case 1:
+		return matches[0], nil
+	case 0:
+		return azureRepository{}, fmt.Errorf("repository %q is not part of this task; use one of: %s", requested, describeRepositoryChoices(repositories))
+	default:
+		return azureRepository{}, fmt.Errorf("repository %q matches %d of this task's repositories; use the project and repository name: %s", requested, len(matches), describeRepositoryChoices(matches))
+	}
 }
 
 func describeRepositoryChoices(repositories []azureRepository) string {

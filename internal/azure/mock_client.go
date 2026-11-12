@@ -359,6 +359,34 @@ func (c *MockClient) QueryWIQL(_ context.Context, projectID, wiql string, top in
 	return &WorkItemSearchResult{Items: items, Count: len(items)}, nil
 }
 
+// QueryWorkItemIDs returns the IDs QueryWIQL would return.
+func (c *MockClient) QueryWorkItemIDs(ctx context.Context, projectID, wiql string, top int) ([]int, error) {
+	result, err := c.QueryWIQL(ctx, projectID, wiql, top)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]int, 0, len(result.Items))
+	for _, item := range result.Items {
+		ids = append(ids, item.ID)
+	}
+	return ids, nil
+}
+
+// GetWorkItems returns the known work items among ids, in the given order.
+func (c *MockClient) GetWorkItems(_ context.Context, _ string, ids []int) ([]WorkItem, error) {
+	byID := map[int]WorkItem{}
+	for _, item := range mockWorkItems(c.snapshot()) {
+		byID[item.ID] = item
+	}
+	items := make([]WorkItem, 0, len(ids))
+	for _, id := range ids {
+		if item, ok := byID[id]; ok {
+			items = append(items, item)
+		}
+	}
+	return items, nil
+}
+
 func (c *MockClient) GetWorkItem(_ context.Context, _ string, id int) (*WorkItem, error) {
 	state := c.snapshot()
 	for _, item := range mockWorkItems(state) {

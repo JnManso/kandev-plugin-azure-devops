@@ -37,6 +37,7 @@ func NewTaskLinks(connections *Connections, links *Links, tasks func() TaskReade
 // azureRepository is a Kandev repository resolved to its Azure Repos identity.
 type azureRepository struct {
 	HostRepositoryID string
+	Organization     string
 	ProjectID        string
 	ProjectName      string
 	RepositoryID     string
@@ -217,6 +218,7 @@ func (t *TaskLinks) linkPullRequest(ctx context.Context, workspaceID, taskID str
 		return PullRequestLink{}, err
 	}
 	link := pullRequestLinkFrom(*pr)
+	link.Organization = linkOrganization(connection.OrganizationURL)
 	if _, err := t.links.AddPullRequest(ctx, workspaceID, taskID, link); err != nil {
 		return PullRequestLink{}, unavailableIf(err)
 	}
@@ -277,7 +279,7 @@ func (t *TaskLinks) linkWorkItem(ctx context.Context, workspaceID, taskID string
 	}
 	link := WorkItemLink{
 		ProjectID: firstNonEmpty(item.Project, reference.Project), WorkItemID: item.ID, Title: item.Title,
-		URL: item.WebURL, State: item.State, Type: item.Type,
+		URL: item.WebURL, State: item.State, Type: item.Type, Organization: linkOrganization(connection.OrganizationURL),
 	}
 	if _, err := t.links.AddWorkItem(ctx, workspaceID, taskID, link); err != nil {
 		return WorkItemLink{}, unavailableIf(err)
@@ -343,9 +345,12 @@ func (t *TaskLinks) resolveRepository(ctx context.Context, client Client, worksp
 	if !strings.EqualFold(repository.ProviderID, ProviderID) {
 		return azureRepository{}, errNotAzureRepository
 	}
-	remote, err := azure.ParseRemoteURL(repository.RemoteURL)
-	organization, orgErr := azure.OrganizationName(organizationURL)
-	if err != nil || orgErr != nil || !strings.EqualFold(remote.Organization, organization) {
+	organization, err := azure.OrganizationName(organizationURL)
+	if err != nil {
+		return azureRepository{}, errNotAzureRepository
+	}
+	remote, ok := recordedRemote(repository, organization)
+	if !ok || !strings.EqualFold(remote.Organization, organization) {
 		return azureRepository{}, errNotAzureRepository
 	}
 	project := firstNonEmpty(repository.OwnerOrProject, remote.Project)
@@ -355,7 +360,7 @@ func (t *TaskLinks) resolveRepository(ctx context.Context, client Client, worksp
 		return azureRepository{}, referenceLookupError(err)
 	}
 	return azureRepository{
-		HostRepositoryID: repository.ID, ProjectID: resolved.ProjectID, ProjectName: resolved.ProjectName,
+		HostRepositoryID: repository.ID, Organization: organization, ProjectID: resolved.ProjectID, ProjectName: resolved.ProjectName,
 		RepositoryID: resolved.ID, RepositoryName: resolved.Name, DefaultBranch: trimHeads(resolved.DefaultBranch),
 	}, nil
 }
@@ -414,25 +419,42 @@ func (t *TaskLinks) openPullRequest(ctx context.Context, workspaceID, taskID str
 		}
 	}
 	if pr == nil {
-		request.WorkItemIDs = t.linkedWorkItemIDs(ctx, workspaceID, taskID)
+		request.WorkItemIDs = t.linkedWorkItemIDs(ctx, workspaceID, taskID, repository.Organization)
 		if pr, err = client.CreatePullRequest(ctx, repository.ProjectID, repository.RepositoryID, request); err != nil {
 			return nil, false, browseError(err)
 		}
 	}
-	_, linkErr := t.links.AddPullRequest(ctx, workspaceID, taskID, pullRequestLinkFrom(*pr))
+	link := pullRequestLinkFrom(*pr)
+	link.Organization = strings.ToLower(repository.Organization)
+	_, linkErr := t.links.AddPullRequest(ctx, workspaceID, taskID, link)
 	return pr, linkErr == nil, nil
 }
 
-func (t *TaskLinks) linkedWorkItemIDs(ctx context.Context, workspaceID, taskID string) []int {
+// linkedWorkItemIDs returns the task's work items in organization. Work item
+// numbers are unique only within an organization, so links recorded for
+// another organization, or before links recorded one, are left out.
+func (t *TaskLinks) linkedWorkItemIDs(ctx context.Context, workspaceID, taskID, organization string) []int {
 	links, err := t.links.WorkItems(ctx, workspaceID, taskID)
-	if err != nil {
+	if err != nil || organization == "" {
 		return nil
 	}
 	ids := make([]int, 0, len(links))
 	for _, link := range links {
-		ids = append(ids, link.WorkItemID)
+		if strings.EqualFold(link.Organization, organization) {
+			ids = append(ids, link.WorkItemID)
+		}
 	}
 	return ids
+}
+
+// linkOrganization is the organization a link records, or "" when the URL is
+// not an organization URL.
+func linkOrganization(organizationURL string) string {
+	organization, err := azure.OrganizationName(organizationURL)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(organization)
 }
 
 // createFromSession serves the native Create PR action. Kandev verified the

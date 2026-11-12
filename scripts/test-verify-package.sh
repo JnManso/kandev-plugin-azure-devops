@@ -25,6 +25,8 @@ runtime:
     darwin-arm64: "server/plugin-darwin-arm64"
     windows-amd64: "server/plugin-windows-amd64.exe"
 EOF
+	printf 'Fixture license.\n' > "$fixture/LICENSE"
+	printf 'Fixture program notice.\n' > "$fixture/NOTICE.md"
 	printf '<svg/>\n' > "$fixture/assets/icon.svg"
 	printf 'Fixture notice.\n' > "$fixture/assets/NOTICE.md"
 	printf 'export default {}\n' > "$fixture/ui/bundle.js"
@@ -124,12 +126,13 @@ write_platform_only_manifest "$unsupported" "        $host_platform: $host_execu
         plan9-amd64: server/plugin-plan9-amd64"
 expect_failure 'an unsupported executable in a platform-only manifest' "$unsupported" host "$host_platform"
 
-for required in manifest.yaml assets/icon.svg assets/NOTICE.md ui/bundle.js ui/plugin.css \
+for required in manifest.yaml LICENSE NOTICE.md assets/icon.svg assets/NOTICE.md ui/bundle.js ui/plugin.css \
 	server/plugin-linux-amd64 server/plugin-linux-arm64 \
 	server/plugin-darwin-amd64 server/plugin-darwin-arm64 \
 	server/plugin-windows-amd64.exe; do
-	copy_fixture "missing-${required##*/}"
-	fixture=$test_dir/missing-${required##*/}
+	name=missing-$(printf '%s' "$required" | tr / -)
+	copy_fixture "$name"
+	fixture=$test_dir/$name
 	rm "$fixture/$required"
 	write_checksums "$fixture"
 	expect_failure "missing $required" "$fixture"
@@ -138,6 +141,11 @@ done
 copy_fixture missing-checksums
 rm "$test_dir/missing-checksums/checksums.txt"
 expect_failure 'missing checksums.txt' "$test_dir/missing-checksums"
+
+copy_fixture unchecksummed-license
+sed '/  LICENSE$/d' "$test_dir/unchecksummed-license/checksums.txt" > "$test_dir/unchecksummed-license/checksums.next"
+mv "$test_dir/unchecksummed-license/checksums.next" "$test_dir/unchecksummed-license/checksums.txt"
+expect_failure 'a license without a checksum entry' "$test_dir/unchecksummed-license"
 
 copy_fixture corrupt-ui
 printf '// changed after checksum generation\n' >> "$test_dir/corrupt-ui/ui/bundle.js"

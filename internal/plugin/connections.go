@@ -18,6 +18,7 @@ var (
 	errNotConfigured         = errors.New("Azure DevOps is not configured for this workspace")
 	errPATRequired           = errors.New("a personal access token is required")
 	errReauthRequired        = errors.New("Azure DevOps credentials must be entered again for this workspace")
+	errConnectionChanged     = errors.New("the Azure DevOps connection of this workspace changed; try again")
 	errSignInForOrganization = errors.New("sign in with Microsoft for this organization")
 )
 
@@ -338,7 +339,7 @@ func (c *Connections) Client(ctx context.Context, workspaceID string) (Client, s
 		return nil, connection, failedPrecondition(errReauthRequired)
 	}
 	if connection.AuthMethod == store.AuthMethodOAuth {
-		return c.newClient(connection.OrganizationURL, oauthAuthorizer{connections: c, workspaceID: workspaceID}), connection, nil
+		return c.newClient(connection.OrganizationURL, oauthAuthorizer{connections: c, workspaceID: workspaceID, bound: connection}), connection, nil
 	}
 	pat, ok, err := c.store.PAT(ctx, workspaceID)
 	if err != nil {
@@ -350,26 +351,32 @@ func (c *Connections) Client(ctx context.Context, workspaceID string) (Client, s
 	return c.newClient(connection.OrganizationURL, azure.NewPATAuthorizer(pat)), connection, nil
 }
 
-// gitSecret returns the secret Git sends for a usable connection and when it
-// stops being valid.
-func (c *Connections) gitSecret(ctx context.Context, workspaceID string, connection store.Connection) (string, time.Time, error) {
+// gitSecret returns the secret Git sends for the verified connection and
+// when it stops being valid. The secret is read under the workspace lock and
+// only while the connection is still the verified one, so a concurrent
+// replacement never hands out another organization's credential.
+func (c *Connections) gitSecret(ctx context.Context, workspaceID string, verified store.Connection) (string, time.Time, error) {
 	limit := c.now().Add(gitCredentialLifetime)
-	if connection.AuthMethod != store.AuthMethodOAuth {
-		pat, ok, err := c.store.PAT(ctx, workspaceID)
-		if err != nil || !ok {
-			return "", time.Time{}, ErrCredentialUnavailable
+	if verified.AuthMethod == store.AuthMethodOAuth {
+		token, expiresAt, err := c.boundAccessToken(ctx, workspaceID, verified)
+		if err != nil {
+			return "", time.Time{}, err
 		}
-		return pat, limit, nil
+		if expiresAt.Before(limit) {
+			limit = expiresAt
+		}
+		return token, limit, nil
 	}
-	token, err := c.accessToken(ctx, workspaceID)
-	if err != nil {
-		return "", time.Time{}, err
+	unlock := c.locks.lock(workspaceID)
+	defer unlock()
+	if _, err := c.boundConnection(ctx, workspaceID, verified); err != nil {
+		return "", time.Time{}, ErrCredentialUnavailable
 	}
-	refreshed, _, err := c.store.Connection(ctx, workspaceID)
-	if err == nil && refreshed.TokenExpiresAt != nil && refreshed.TokenExpiresAt.Before(limit) {
-		limit = *refreshed.TokenExpiresAt
+	pat, ok, err := c.store.PAT(ctx, workspaceID)
+	if err != nil || !ok {
+		return "", time.Time{}, ErrCredentialUnavailable
 	}
-	return token, limit, nil
+	return pat, limit, nil
 }
 
 // RecordHealth probes the stored connection and records the result for its

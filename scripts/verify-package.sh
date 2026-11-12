@@ -15,7 +15,7 @@ mode=$2
 host_platform=${3-}
 [ -d "$package_dir" ] || fail "package directory not found: $package_dir"
 
-for required in manifest.yaml assets/icon.svg assets/NOTICE.md ui/bundle.js ui/plugin.css checksums.txt; do
+for required in manifest.yaml LICENSE NOTICE.md assets/icon.svg assets/NOTICE.md ui/bundle.js ui/plugin.css checksums.txt; do
 	[ -f "$package_dir/$required" ] || fail "missing required file: $required"
 done
 
@@ -81,7 +81,7 @@ expected_directories=$(printf '%s\n' assets server ui | LC_ALL=C sort)
 actual_directories=$(cd "$package_dir" && find . -mindepth 1 -type d -print | sed 's#^\./##' | LC_ALL=C sort)
 [ "$actual_directories" = "$expected_directories" ] || fail 'package directory inventory does not match the supported layout'
 
-expected_files=$(printf '%s\n' manifest.yaml assets/icon.svg assets/NOTICE.md ui/bundle.js ui/plugin.css checksums.txt $executable_paths | LC_ALL=C sort)
+expected_files=$(printf '%s\n' manifest.yaml LICENSE NOTICE.md assets/icon.svg assets/NOTICE.md ui/bundle.js ui/plugin.css checksums.txt $executable_paths | LC_ALL=C sort)
 actual_files=$(cd "$package_dir" && find . -type f -print | sed 's#^\./##' | LC_ALL=C sort)
 [ "$actual_files" = "$expected_files" ] || {
 	printf 'unexpected package file inventory\nexpected:\n%s\nfound:\n%s\n' "$expected_files" "$actual_files" >&2
@@ -94,7 +94,7 @@ checksum_entries=$(awk '
 	END { if (NR == 0 || invalid) exit 1 }
 ' "$package_dir/checksums.txt") || fail 'checksums.txt has invalid lines'
 checksum_files=$(printf '%s\n' "$checksum_entries" | LC_ALL=C sort)
-expected_checksum_files=$(printf '%s\n' manifest.yaml assets/icon.svg assets/NOTICE.md ui/bundle.js ui/plugin.css $executable_paths | LC_ALL=C sort)
+expected_checksum_files=$(printf '%s\n' manifest.yaml LICENSE NOTICE.md assets/icon.svg assets/NOTICE.md ui/bundle.js ui/plugin.css $executable_paths | LC_ALL=C sort)
 [ "$checksum_files" = "$expected_checksum_files" ] || fail 'checksums.txt does not list every package file exactly once'
 
 if command -v sha256sum >/dev/null 2>&1; then

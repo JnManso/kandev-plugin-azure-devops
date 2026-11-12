@@ -115,11 +115,12 @@ func (r *Runtime) SetHost(host pluginsdk.Host) {
 	}
 	watchService := watches.NewService(watches.Dependencies{
 		Store: watches.NewStore(stateStore, stateKeys),
-		Client: func(ctx context.Context, workspaceID string) (watches.Client, error) {
-			client, _, err := connections.Client(ctx, workspaceID)
-			return client, err
+		Client: func(ctx context.Context, workspaceID string) (watches.Client, string, error) {
+			client, connection, err := connections.Client(ctx, workspaceID)
+			return client, connection.OrganizationURL, err
 		},
 		Tasks:      func() watches.Tasks { return host.Tasks() },
+		Link:       links.linkWatchItem,
 		Workspaces: func(ctx context.Context) ([]string, error) { return listWorkspaceIDs(ctx, host.Workspaces()) },
 	})
 	built.watches = &Watches{service: watchService, host: host, executorProfiles: func() (pluginsdk.ExecutorProfileReader, bool) {

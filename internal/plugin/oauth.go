@@ -29,6 +29,7 @@ const (
 var (
 	errOAuthUnavailable = errors.New("Microsoft sign-in needs an application (client) ID")
 	errOAuthFlowInvalid = errors.New("the Microsoft sign-in attempt is invalid or expired; start again")
+	errOAuthSuperseded  = errors.New("the Azure DevOps connection changed during this Microsoft sign-in; sign in again")
 	errNoRefreshToken   = errors.New("Microsoft sign-in returned no refresh token")
 	errNoAccess         = errors.New("the signed-in account cannot access this organization")
 	errNotOAuth         = errors.New("this workspace has no Microsoft account connection")
@@ -101,12 +102,17 @@ func (c *Connections) StartOAuth(ctx context.Context, workspaceID, actorID strin
 	if err != nil {
 		return OAuthStart{}, err
 	}
+	current, currentFound, err := c.store.Connection(ctx, workspaceID)
+	if err != nil {
+		return OAuthStart{}, unavailable(err)
+	}
 	now := c.now().UTC()
 	flow := store.Flow{
 		StateHash: hashState(state), WorkspaceID: workspaceID, ActorID: actorID,
 		OrganizationURL: organizationURL, DefaultProjectID: strings.TrimSpace(input.DefaultProjectID),
 		DefaultProjectName: strings.TrimSpace(input.DefaultProjectName), TenantID: tenant, ClientID: clientID,
 		PKCEVerifier: verifier, RedirectURL: redirectURL, ExpiresAt: now.Add(oauthFlowTTL),
+		ConnectionFound: currentFound, ConnectionGeneration: current.Generation,
 	}
 	if err := c.flows.Put(ctx, flow, now); err != nil {
 		return OAuthStart{}, err
@@ -220,9 +226,14 @@ func (c *Connections) replaceWithOAuth(ctx context.Context, flow store.Flow, acc
 	persistCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), oauthPersistenceTimeout)
 	defer cancel()
 	workspaceID := flow.WorkspaceID
-	previous, _, err := c.store.Connection(persistCtx, workspaceID)
+	previous, found, err := c.store.Connection(persistCtx, workspaceID)
 	if err != nil {
 		return err
+	}
+	// A deletion, sign-out, or other save while the code was redeemed wins:
+	// the claimed flow cannot be purged, so it is checked here.
+	if found != flow.ConnectionFound || previous.Generation != flow.ConnectionGeneration {
+		return invalidArgument(errOAuthSuperseded)
 	}
 	snapshot, err := c.snapshotOAuthTokens(persistCtx, workspaceID)
 	if err != nil {
@@ -277,14 +288,18 @@ func (c *Connections) signOut(ctx context.Context, workspaceID string) error {
 	return c.store.SaveConnection(ctx, workspaceID, connection)
 }
 
-// oauthAuthorizer reads the workspace's current access token per request.
+// oauthAuthorizer reads the access token of the connection its client was
+// built for. Renewal within that connection keeps working; once the
+// connection is replaced, signed out, or deleted, requests fail instead of
+// sending another connection's token to this client's organization.
 type oauthAuthorizer struct {
 	connections *Connections
 	workspaceID string
+	bound       store.Connection
 }
 
 func (a oauthAuthorizer) Header(ctx context.Context) (string, error) {
-	token, err := a.connections.accessToken(ctx, a.workspaceID)
+	token, _, err := a.connections.boundAccessToken(ctx, a.workspaceID, a.bound)
 	if err != nil {
 		return "", err
 	}
@@ -292,7 +307,7 @@ func (a oauthAuthorizer) Header(ctx context.Context) (string, error) {
 }
 
 func (a oauthAuthorizer) Renew(ctx context.Context, rejectedHeader string) (bool, error) {
-	return a.connections.renewAccessToken(ctx, a.workspaceID, strings.TrimPrefix(rejectedHeader, azure.BearerPrefix))
+	return a.connections.renewAccessToken(ctx, a.workspaceID, a.bound, strings.TrimPrefix(rejectedHeader, azure.BearerPrefix))
 }
 
 func (a oauthAuthorizer) Redact(text string) string {
@@ -303,35 +318,55 @@ func (a oauthAuthorizer) Redact(text string) string {
 	return azure.RedactToken(text, token)
 }
 
-// accessToken returns an access token valid for at least the renewal margin,
-// renewing it first under the workspace lock when needed.
-func (c *Connections) accessToken(ctx context.Context, workspaceID string) (string, error) {
-	if token, ok, err := c.freshAccessToken(ctx, workspaceID); err != nil || ok {
-		return token, err
-	}
+// boundAccessToken returns an access token of the bound connection, valid
+// for at least the renewal margin, and when it expires. It reads under the
+// workspace lock, which every credential change holds while it writes the
+// token and the connection, so the token always belongs to the connection
+// that was checked.
+func (c *Connections) boundAccessToken(ctx context.Context, workspaceID string, bound store.Connection) (string, time.Time, error) {
 	unlock := c.locks.lock(workspaceID)
 	defer unlock()
-	// A concurrent caller may have renewed while this one waited.
-	if token, ok, err := c.freshAccessToken(ctx, workspaceID); err != nil || ok {
-		return token, err
+	connection, err := c.boundConnection(ctx, workspaceID, bound)
+	if err != nil {
+		return "", time.Time{}, err
 	}
-	if err := c.refreshLocked(ctx, workspaceID); err != nil {
-		return "", err
+	if connection.TokenExpiresAt == nil || connection.TokenExpiresAt.Sub(c.now()) <= oauthRenewalMargin {
+		if err := c.refreshLocked(ctx, workspaceID); err != nil {
+			return "", time.Time{}, err
+		}
+		if connection, err = c.boundConnection(ctx, workspaceID, bound); err != nil {
+			return "", time.Time{}, err
+		}
 	}
 	token, ok, err := c.store.Secret(ctx, store.OAuthAccessKey(workspaceID))
-	if err != nil || !ok {
-		return "", azure.ErrReauthRequired
+	if err != nil || !ok || connection.TokenExpiresAt == nil {
+		return "", time.Time{}, azure.ErrReauthRequired
 	}
-	return token, nil
+	return token, *connection.TokenExpiresAt, nil
+}
+
+// boundConnection returns the workspace connection while it is still the
+// bound one: same organization, sign-in method, and credential generation,
+// and usable. Callers hold the workspace lock.
+func (c *Connections) boundConnection(ctx context.Context, workspaceID string, bound store.Connection) (store.Connection, error) {
+	connection, found, err := c.store.Connection(ctx, workspaceID)
+	if err != nil {
+		return store.Connection{}, err
+	}
+	if !found || connection.ReauthRequired || connection.Generation != bound.Generation ||
+		connection.AuthMethod != bound.AuthMethod || connection.OrganizationURL != bound.OrganizationURL {
+		return store.Connection{}, errConnectionChanged
+	}
+	return connection, nil
 }
 
 // renewAccessToken replaces a token Azure rejected. When a concurrent caller
 // already replaced it, it does not renew again, which would spend the freshly
 // rotated refresh token.
-func (c *Connections) renewAccessToken(ctx context.Context, workspaceID, rejected string) (bool, error) {
+func (c *Connections) renewAccessToken(ctx context.Context, workspaceID string, bound store.Connection, rejected string) (bool, error) {
 	unlock := c.locks.lock(workspaceID)
 	defer unlock()
-	if _, err := c.oauthConnection(ctx, workspaceID); err != nil {
+	if _, err := c.boundConnection(ctx, workspaceID, bound); err != nil {
 		return false, err
 	}
 	if current, ok, err := c.store.Secret(ctx, store.OAuthAccessKey(workspaceID)); err == nil && ok && rejected != "" && current != rejected {
@@ -341,21 +376,6 @@ func (c *Connections) renewAccessToken(ctx context.Context, workspaceID, rejecte
 		return false, err
 	}
 	return true, nil
-}
-
-func (c *Connections) freshAccessToken(ctx context.Context, workspaceID string) (string, bool, error) {
-	connection, err := c.oauthConnection(ctx, workspaceID)
-	if err != nil {
-		return "", false, err
-	}
-	if connection.TokenExpiresAt == nil || connection.TokenExpiresAt.Sub(c.now()) <= oauthRenewalMargin {
-		return "", false, nil
-	}
-	token, ok, err := c.store.Secret(ctx, store.OAuthAccessKey(workspaceID))
-	if err != nil || !ok {
-		return "", false, nil
-	}
-	return token, true, nil
 }
 
 // oauthConnection returns a usable Microsoft account connection.

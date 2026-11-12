@@ -196,7 +196,7 @@ func TestConcurrentRenewalIssuesOneTokenRequest(t *testing.T) {
 	results := make(chan string, 4)
 	for range 4 {
 		go func() {
-			token, err := services.connections.accessToken(context.Background(), "ws-1")
+			token, err := currentAccessToken(services.connections, "ws-1")
 			if err != nil {
 				token = "error: " + err.Error()
 			}
@@ -219,7 +219,7 @@ func TestRenewSkipsWhenTheRejectedTokenWasAlreadyRotated(t *testing.T) {
 	h := newHarness(t)
 	h.signIn("ws-1")
 	services, _ := h.runtime.ready()
-	renewed, err := services.connections.renewAccessToken(t.Context(), "ws-1", "an-older-token")
+	renewed, err := services.connections.renewAccessToken(t.Context(), "ws-1", mustConnection(t, h, "ws-1"), "an-older-token")
 	if err != nil || !renewed || h.entra.refreshCount() != 0 {
 		t.Fatalf("renewed = %v err = %v refresh calls = %d", renewed, err, h.entra.refreshCount())
 	}
@@ -266,7 +266,7 @@ func TestARenewalInFlightCannotOverwriteANewSignIn(t *testing.T) {
 	h.entra.mu.Unlock()
 	renewal := make(chan error, 1)
 	go func() {
-		_, err := services.connections.accessToken(context.Background(), "ws-1")
+		_, err := currentAccessToken(services.connections, "ws-1")
 		renewal <- err
 	}()
 	time.Sleep(50 * time.Millisecond)
@@ -362,7 +362,8 @@ func TestDeleteRemovesMicrosoftTokensAndPendingSignIns(t *testing.T) {
 		"organizationUrl": "https://dev.azure.com/acme", "clientId": testClientID, "redirectUrl": testRedirect,
 	})
 	h.action("ws-1", "connection.delete", nil)
-	if keys := h.host.StateKeys("workspace", "ws-1"); len(keys) != 0 {
+	// Only the deleted connection's generation stays, for the next connection.
+	if keys := h.host.StateKeys("workspace", "ws-1"); len(keys) != 1 || keys[0] != "connectionGeneration" {
 		t.Fatalf("state after delete = %v", keys)
 	}
 	if _, found := h.host.Secret(store.OAuthRefreshKey("ws-1")); found {
@@ -386,4 +387,24 @@ func TestGitCredentialUsesTheMicrosoftAccessTokenUntilSignOut(t *testing.T) {
 	if _, err := h.runtime.ResolveGitCredential(context.Background(), credentialRequest()); err == nil {
 		t.Fatal("a credential was issued after sign-out")
 	}
+}
+
+// currentAccessToken reads a token bound to the connection stored now, like
+// a client built at that moment.
+func currentAccessToken(connections *Connections, workspaceID string) (string, error) {
+	connection, _, err := connections.store.Connection(context.Background(), workspaceID)
+	if err != nil {
+		return "", err
+	}
+	token, _, err := connections.boundAccessToken(context.Background(), workspaceID, connection)
+	return token, err
+}
+
+func mustConnection(t *testing.T, h *harness, workspaceID string) store.Connection {
+	t.Helper()
+	connection, found, err := store.New(h.host).Connection(t.Context(), workspaceID)
+	if err != nil || !found {
+		t.Fatalf("connection = %v, %v", found, err)
+	}
+	return connection
 }

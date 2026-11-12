@@ -275,6 +275,23 @@ func (c *RESTClient) QueryWIQL(ctx context.Context, projectID, wiql string, top 
 	if top <= 0 {
 		top = workItemBatchSize
 	}
+	ids, err := c.QueryWorkItemIDs(ctx, projectID, wiql, top)
+	if err != nil {
+		return nil, err
+	}
+	items, err := c.hydrateWorkItems(ctx, projectID, ids)
+	if err != nil {
+		return nil, err
+	}
+	return &WorkItemSearchResult{Items: items, Count: len(items)}, nil
+}
+
+// QueryWorkItemIDs runs a WIQL query and returns at most top matching IDs in
+// query order, without reading the work items.
+func (c *RESTClient) QueryWorkItemIDs(ctx context.Context, projectID, wiql string, top int) ([]int, error) {
+	if top <= 0 {
+		top = workItemBatchSize
+	}
 	endpoint := fmt.Sprintf("/%s/_apis/wit/wiql?$top=%d&api-version=%s", pathPart(projectID), top, restAPIVersion)
 	var response struct {
 		WorkItems []struct {
@@ -288,11 +305,13 @@ func (c *RESTClient) QueryWIQL(ctx context.Context, projectID, wiql string, top 
 	for _, ref := range response.WorkItems {
 		ids = append(ids, ref.ID)
 	}
-	items, err := c.hydrateWorkItems(ctx, projectID, ids)
-	if err != nil {
-		return nil, err
-	}
-	return &WorkItemSearchResult{Items: items, Count: len(items)}, nil
+	return ids, nil
+}
+
+// GetWorkItems reads work items by ID and returns them in the given order;
+// items that no longer exist are left out.
+func (c *RESTClient) GetWorkItems(ctx context.Context, projectID string, ids []int) ([]WorkItem, error) {
+	return c.hydrateWorkItems(ctx, projectID, ids)
 }
 
 func (c *RESTClient) GetWorkItem(ctx context.Context, projectID string, id int) (*WorkItem, error) {

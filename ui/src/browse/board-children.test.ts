@@ -8,6 +8,7 @@ import {
   isCardExpanded,
   mergeChildren,
   missingChildIds,
+  replaceChildItem,
 } from "./board-children";
 import type { AzureDevOpsChildCard } from "./types";
 
@@ -89,5 +90,25 @@ describe("child levels", () => {
     expect(merged.get(111)).toEqual([]);
     expect(merged.get(1)?.length).toBe(2);
     expect(byParent.has(12)).toBe(false);
+  });
+});
+
+describe("replaceChildItem", () => {
+  it("shows an assignment changed in the child detail on every listing of the child", () => {
+    const shared = { ...child(7, "Task", "InProgress"), assignedTo: "Ana" };
+    const byParent = new Map([
+      [1, [child(5, "Task"), shared]],
+      [2, [shared]],
+    ]);
+    const updated = { ...child(7, "Task"), revision: 2, assignedTo: undefined };
+    const replaced = replaceChildItem(byParent, updated);
+    expect(replaced.get(1)?.[1]).toMatchObject({ id: 7, revision: 2, assignedTo: undefined, stateCategory: "InProgress" });
+    expect(replaced.get(2)?.[0]).toMatchObject({ id: 7, revision: 2, assignedTo: undefined });
+    expect(replaced.get(1)?.[0]).toBe(byParent.get(1)?.[0]);
+  });
+
+  it("keeps the same tree when the item is not listed", () => {
+    const byParent = new Map([[1, [child(5, "Task")]]]);
+    expect(replaceChildItem(byParent, child(9, "Task"))).toBe(byParent);
   });
 });

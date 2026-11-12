@@ -314,7 +314,20 @@ the built-in integration are the parity checklist.
   - the OAuth access token as password, renewed first.
 
   `GetGitCredentialBinding` returns `azure-devops-credential:<generation>`, so
-  method changes and sign-outs revoke outstanding leases.
+  method changes and sign-outs revoke outstanding leases. Deleting a
+  connection keeps its generation in `connectionGeneration`, and the next
+  connection continues past it, so a lease never matches a recreated
+  credential.
+
+  The secret is read under the workspace lock and only while the connection
+  still has the verified generation, organization, and method. Every
+  credential change holds that lock while it writes the secret and the
+  connection, so a concurrent replacement cannot hand out another
+  organization's credential. A Microsoft account client is bound the same way
+  to the connection it was built for: renewal within that connection works,
+  and requests after a replacement fail. A sign-in records the connection
+  generation when it starts and is rejected if the connection changed before
+  it completes.
 
   The repository is matched by its recorded clone URL. A row without one (for
   example, the provider row Kandev records in place of a task-worktree row) is
@@ -331,29 +344,49 @@ The watch service is ported from `watch_service.go`, `watch_store.go`, and
 `poller.go`. It is stored in workspace state:
 
 - `watch.<id>`: configuration, including `agentProfileId`,
-  `executorProfileId`, generation, and disabled reason;
-- `watch.<id>.item.<generation>.<itemKey>`: reservation and created task ID,
-  with item keys `wi-<id>` and `pr-<repositoryGuid>-<id>`.
+  `executorProfileId`, generation, the organization of that generation, and
+  disabled reason;
+- `watch.<id>.item.<generation>.<itemKey>`: reservation, created task ID,
+  the matched item, and whether the task holds its link, with item keys
+  `wi-<id>` and `pr-<repositoryGuid>-<id>`.
 
 Behavior:
 
 - **Editor.** The watch editor lists workflows, steps, agent profiles, and
   executor profiles from the host read APIs. The host returns only profiles
   the plugin may launch with (shared ones).
-- **Polling.** The manager polls every minute. For each due watch it queries
-  Azure DevOps and writes the reservation before creating the task. It calls
-  `Tasks().Create` with `StartAgent`, `Launch{AgentProfileID,
+- **Polling.** The manager polls every minute and re-checks under the watch
+  lock that the stored watch is still due, so a watch disabled after it was
+  listed does not run. Work-item watches read up to 2,000 matching IDs and
+  then only the items the current generation has not handled, 100 at a time;
+  pull-request watches page through up to 2,000 results. Each match is
+  reserved before `Tasks().Create` with `StartAgent`, `Launch{AgentProfileID,
   ExecutorProfileID, Prompt}`, the repository and base branch, and metadata
-  `azure_devops_watch_id` and `azure_devops_item_key`. It then records the
-  task identifier. A failed creation releases the reservation. A launch
-  rejected because the profile is not available disables the watch and stores
-  the reason, which the settings screen shows. A per-watch open-task limit
-  counts created tasks that are not terminal or archived.
+  `azure_devops_watch_id` and `azure_devops_item_key`. The task is then linked
+  to its work item or pull request and the reservation records the task ID;
+  a failed link is retried on later polls.
+- **Uncertain outcomes.** A creation Kandev rejected releases the
+  reservation. Any other failure, and a failed write of the task ID, keeps the
+  reservation without a task ID. The next poll looks the task up by its
+  metadata, records it, or releases the reservation when no such task exists.
+  Until then the reservation counts against the limit. A launch rejected
+  because the profile is not available disables the watch and stores the
+  reason, which the settings screen shows.
+- **Inflight limit.** The per-watch open-task limit counts created tasks of
+  every generation that are not terminal or archived; a task whose state
+  cannot be read counts as open. Reservations of earlier generations are
+  removed once their task stops.
+- **Organization.** Work item numbers are unique only within an organization.
+  When the workspace connection moves to another organization, the next poll
+  starts a new generation; replacing the credential within the organization
+  keeps it.
 - **Reset and delete.** Kandev offers plugins no task deletion: `Tasks()` has
   no Delete, `PluginOwnedTaskTrees.Delete` is refused, and exact task commands
   need management approval. The built-in cleanup policy is therefore not
   ported. Reset starts a new generation, so current matches create tasks
-  again. Delete removes the watch and its reservations. Both keep the tasks the
+  again; running tasks of the earlier generation still count against the
+  limit. Delete removes the watch first and then its reservations, so a failed
+  cleanup never leaves a pollable watch without them. Both keep the tasks the
   watch created.
 
 ## Failure and recovery

@@ -13,6 +13,8 @@ const (
 	scopeWorkspace = "workspace"
 	connectionKey  = "connection"
 	healthKey      = "health"
+	// generationKey keeps the last generation of a deleted connection.
+	generationKey = "connectionGeneration"
 
 	// AuthMethodPAT authenticates with a Personal Access Token.
 	AuthMethodPAT = "pat"
@@ -106,13 +108,42 @@ func (s *Store) Connection(ctx context.Context, workspaceID string) (Connection,
 	return connection, found, err
 }
 
-// SaveConnection replaces the workspace connection.
+// SaveConnection replaces the workspace connection. A connection saved after
+// a deletion continues past the deleted connection's generation, so a Git
+// credential lease bound to the deleted credential never matches its
+// replacement.
 func (s *Store) SaveConnection(ctx context.Context, workspaceID string, connection Connection) error {
+	var deleted deletedGeneration
+	if _, err := s.load(ctx, workspaceID, generationKey, &deleted); err != nil {
+		return err
+	}
+	if connection.Generation <= deleted.Generation {
+		connection.Generation = deleted.Generation + 1
+	}
 	return s.save(ctx, workspaceID, connectionKey, connection)
 }
 
-// DeleteConnection removes the connection and its health record.
+// deletedGeneration is the generation of the last deleted connection.
+type deletedGeneration struct {
+	Generation int64 `json:"generation"`
+}
+
+// DeleteConnection removes the connection and its health record, keeping its
+// generation for the next connection.
 func (s *Store) DeleteConnection(ctx context.Context, workspaceID string) error {
+	connection, found, err := s.Connection(ctx, workspaceID)
+	if err != nil {
+		return err
+	}
+	var deleted deletedGeneration
+	if _, err := s.load(ctx, workspaceID, generationKey, &deleted); err != nil {
+		return err
+	}
+	if found && connection.Generation > deleted.Generation {
+		if err := s.save(ctx, workspaceID, generationKey, deletedGeneration{Generation: connection.Generation}); err != nil {
+			return err
+		}
+	}
 	if err := s.host.DeleteState(ctx, scopeWorkspace, workspaceID, connectionKey); err != nil {
 		return fmt.Errorf("delete connection: %w", err)
 	}
