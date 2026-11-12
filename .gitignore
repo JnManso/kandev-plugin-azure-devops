@@ -1,4 +1,7 @@
 /bin/
 /.build/
 /node_modules/
+/ui/bundle.js
 *.tar.gz
+/test-results/
+/playwright-report/

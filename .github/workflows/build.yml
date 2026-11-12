@@ -30,19 +30,36 @@ jobs:
           [[ "$sdk_ref" =~ ^[0-9a-f]{40}$ ]]
           echo "ref=$sdk_ref" >> "$GITHUB_OUTPUT"
 
-      - name: Check out kandev SDK contract
+      - name: Check out Kandev packaging tooling
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           repository: kdlbs/kandev
           path: kandev
           ref: ${{ steps.sdk.outputs.ref }}
-          sparse-checkout: apps/backend
+          sparse-checkout: |
+            apps/backend
+            pluginsdk
 
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: plugin/go.mod
           cache-dependency-path: plugin/go.sum
+
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: plugin/package-lock.json
+
+      - name: Install UI dependencies
+        working-directory: plugin
+        run: npm ci --ignore-scripts
+
+      - name: Check SDK compatibility
+        working-directory: plugin
+        run: go run github.com/kdlbs/kandev/pluginsdk/cmd/kandev-sdk-check@v0.2.0 --manifest manifest.yaml --frontend-sdk node_modules/@kdlbs/plugin-sdk
 
       - name: Build host binary
         working-directory: plugin

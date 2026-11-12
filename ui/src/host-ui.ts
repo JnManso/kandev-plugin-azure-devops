@@ -1,0 +1,166 @@
+/**
+ * Kandev host UI components as importable proxies. Each resolves the host
+ * component at render time, so ported code can import them like local
+ * components.
+ */
+import type { PluginHostApi } from "@kdlbs/plugin-sdk";
+import { currentHost } from "./runtime";
+
+type UIName = keyof PluginHostApi["ui"];
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- host components are typed as opaque.
+type AnyComponent = (props: any) => any;
+
+type ChangeEvent = { target: { value: string; checked?: boolean } };
+type Base = { className?: string; children?: unknown; id?: string; disabled?: boolean; [prop: string]: unknown };
+type ButtonProps = Base & { onClick?: (event: { stopPropagation(): void; preventDefault(): void }) => void };
+type InputProps = Base & { value?: string | number; onChange?: (event: ChangeEvent) => void; onKeyDown?: (event: { key: string; preventDefault(): void }) => void };
+type SelectProps = Base & { value?: string; onValueChange?: (value: string) => void; open?: boolean; onOpenChange?: (open: boolean) => void };
+type OpenProps = Base & { open?: boolean; onOpenChange?: (open: boolean) => void };
+type CheckedProps = Base & { checked?: boolean; onCheckedChange?: (checked: boolean) => void };
+type TabsProps = Base & { value?: string; onValueChange?: (value: string) => void };
+
+function typed<Props>(name: UIName): (props: Props) => unknown {
+  return proxy(name);
+}
+
+function proxy(name: UIName): AnyComponent {
+  const component: AnyComponent = (props) => currentHost().jsx(currentHost().ui[name], props);
+  Object.defineProperty(component, "name", { value: `Host${name}` });
+  return component;
+}
+
+export const Accordion = proxy("Accordion");
+export const AccordionContent = proxy("AccordionContent");
+export const AccordionItem = proxy("AccordionItem");
+export const AccordionTrigger = proxy("AccordionTrigger");
+export const Action = proxy("Action");
+export const ActionGroup = proxy("ActionGroup");
+export const Alert = proxy("Alert");
+export const AlertDescription = proxy("AlertDescription");
+export const AlertTitle = proxy("AlertTitle");
+export const Badge = proxy("Badge");
+export const Button = typed<ButtonProps>("Button");
+export const Card = proxy("Card");
+export const CardAction = proxy("CardAction");
+export const CardContent = proxy("CardContent");
+export const CardDescription = proxy("CardDescription");
+export const CardFooter = proxy("CardFooter");
+export const CardHeader = proxy("CardHeader");
+export const CardTitle = proxy("CardTitle");
+export const ChangeRequestDetail = proxy("ChangeRequestDetail");
+export const ChangeRequestList = proxy("ChangeRequestList");
+export const ChangeRequestRow = proxy("ChangeRequestRow");
+export const ChartContainer = proxy("ChartContainer");
+export const ChartLegend = proxy("ChartLegend");
+export const ChartLegendContent = proxy("ChartLegendContent");
+export const ChartStyle = proxy("ChartStyle");
+export const ChartTooltip = proxy("ChartTooltip");
+export const ChartTooltipContent = proxy("ChartTooltipContent");
+export const Checkbox = typed<CheckedProps>("Checkbox");
+export const Collapsible = typed<OpenProps>("Collapsible");
+export const CollapsibleContent = proxy("CollapsibleContent");
+export const CollapsibleTrigger = proxy("CollapsibleTrigger");
+export const Combobox = proxy("Combobox");
+export const Dialog = typed<OpenProps>("Dialog");
+export const DialogClose = proxy("DialogClose");
+export const DialogContent = proxy("DialogContent");
+export const DialogDescription = proxy("DialogDescription");
+export const DialogFooter = proxy("DialogFooter");
+export const DialogHeader = proxy("DialogHeader");
+export const DialogTitle = proxy("DialogTitle");
+export const DialogTrigger = proxy("DialogTrigger");
+export const Drawer = typed<OpenProps>("Drawer");
+export const DrawerClose = proxy("DrawerClose");
+export const DrawerContent = proxy("DrawerContent");
+export const DrawerDescription = proxy("DrawerDescription");
+export const DrawerFooter = proxy("DrawerFooter");
+export const DrawerHeader = proxy("DrawerHeader");
+export const DrawerOverlay = proxy("DrawerOverlay");
+export const DrawerPortal = proxy("DrawerPortal");
+export const DrawerTitle = proxy("DrawerTitle");
+export const DrawerTrigger = proxy("DrawerTrigger");
+export const DropdownMenu = typed<OpenProps>("DropdownMenu");
+export const DropdownMenuContent = proxy("DropdownMenuContent");
+export const DropdownMenuItem = proxy("DropdownMenuItem");
+export const DropdownMenuSeparator = proxy("DropdownMenuSeparator");
+export const DropdownMenuTrigger = proxy("DropdownMenuTrigger");
+export const Empty = proxy("Empty");
+export const EmptyContent = proxy("EmptyContent");
+export const EmptyDescription = proxy("EmptyDescription");
+export const EmptyHeader = proxy("EmptyHeader");
+export const EmptyMedia = proxy("EmptyMedia");
+export const EmptyTitle = proxy("EmptyTitle");
+export const Input = typed<InputProps>("Input");
+export const IntegrationAuthStatusBanner = proxy("IntegrationAuthStatusBanner");
+export const IntegrationChangeRequestStatus = proxy("IntegrationChangeRequestStatus");
+export const IntegrationCursorPagination = proxy("IntegrationCursorPagination");
+export const IntegrationEnabledControl = proxy("IntegrationEnabledControl");
+export const IntegrationIcon = proxy("IntegrationIcon");
+export const IntegrationListToolbar = proxy("IntegrationListToolbar");
+export const IntegrationRepositoryFilter = proxy("IntegrationRepositoryFilter");
+export const IntegrationSaveQueryDialog = proxy("IntegrationSaveQueryDialog");
+export const IntegrationScopeBar = proxy("IntegrationScopeBar");
+export const IntegrationStartTaskMenu = proxy("IntegrationStartTaskMenu");
+export const Kbd = proxy("Kbd");
+export const KbdGroup = proxy("KbdGroup");
+export const Label = proxy("Label");
+export const PageTopbar = proxy("PageTopbar");
+export const Pagination = proxy("Pagination");
+export const PaginationContent = proxy("PaginationContent");
+export const PaginationEllipsis = proxy("PaginationEllipsis");
+export const PaginationItem = proxy("PaginationItem");
+export const PaginationLink = proxy("PaginationLink");
+export const PaginationNext = proxy("PaginationNext");
+export const PaginationPrevious = proxy("PaginationPrevious");
+export const Popover = typed<OpenProps>("Popover");
+export const PopoverAnchor = proxy("PopoverAnchor");
+export const PopoverContent = proxy("PopoverContent");
+export const PopoverDescription = proxy("PopoverDescription");
+export const PopoverHeader = proxy("PopoverHeader");
+export const PopoverTitle = proxy("PopoverTitle");
+export const PopoverTrigger = proxy("PopoverTrigger");
+export const Progress = proxy("Progress");
+export const PromptMentionText = proxy("PromptMentionText");
+export const RichTextEditor = proxy("RichTextEditor");
+export const RichTextReadOnly = proxy("RichTextReadOnly");
+export const ScrollArea = proxy("ScrollArea");
+export const Select = typed<SelectProps>("Select");
+export const SelectContent = proxy("SelectContent");
+export const SelectItem = proxy("SelectItem");
+export const SelectTrigger = proxy("SelectTrigger");
+export const SelectValue = proxy("SelectValue");
+export const Separator = proxy("Separator");
+export const SettingsCard = proxy("SettingsCard");
+export const SettingsSection = proxy("SettingsSection");
+export const Sheet = typed<OpenProps>("Sheet");
+export const SheetClose = proxy("SheetClose");
+export const SheetContent = proxy("SheetContent");
+export const SheetDescription = proxy("SheetDescription");
+export const SheetFooter = proxy("SheetFooter");
+export const SheetHeader = proxy("SheetHeader");
+export const SheetTitle = proxy("SheetTitle");
+export const SheetTrigger = proxy("SheetTrigger");
+export const Skeleton = proxy("Skeleton");
+export const Spinner = proxy("Spinner");
+export const Switch = typed<CheckedProps>("Switch");
+export const Table = proxy("Table");
+export const TableBody = proxy("TableBody");
+export const TableCell = proxy("TableCell");
+export const TableHead = proxy("TableHead");
+export const TableHeader = proxy("TableHeader");
+export const TableRow = proxy("TableRow");
+export const Tabs = typed<TabsProps>("Tabs");
+export const TabsContent = proxy("TabsContent");
+export const TabsList = proxy("TabsList");
+export const TabsTrigger = proxy("TabsTrigger");
+export const TaskCreateDialog = proxy("TaskCreateDialog");
+export const TaskRowIndicator = proxy("TaskRowIndicator");
+export const Textarea = typed<InputProps>("Textarea");
+export const Tooltip = proxy("Tooltip");
+export const TooltipContent = proxy("TooltipContent");
+export const TooltipProvider = proxy("TooltipProvider");
+export const TooltipTrigger = proxy("TooltipTrigger");
+export const WorkspaceAgentChat = proxy("WorkspaceAgentChat");
+export const WorkspaceScopedSection = proxy("WorkspaceScopedSection");
+export const WorkspaceTaskStatus = proxy("WorkspaceTaskStatus");
+export const WorkspaceTaskUsage = proxy("WorkspaceTaskUsage");

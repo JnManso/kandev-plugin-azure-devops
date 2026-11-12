@@ -1,354 +1,209 @@
-# kandev-plugin-template
+# kandev-plugin-azure-devops
 
-A starter template for building a [kandev](https://github.com/kdlbs/kandev)
-**native-UI plugin** — its own git repo, packaged into a versioned tarball and
-installed against a running kandev instance. Click **“Use this template”** on
-GitHub (or copy this repo) to bootstrap your own plugin.
+Azure DevOps Services integration for [Kandev](https://github.com/kdlbs/kandev),
+delivered as a runtime plugin.
 
-It is a small, complete example of the core plugin surfaces, wired together so
-you can delete what you do not need rather than assemble it from scratch:
+## Status
 
-- **Native nav item + route** — `ui/bundle.js` adds a sidebar entry that opens
-  `/template`, a page rendered natively inside the kandev SPA (not an iframe)
-  using the host's own React instance.
-- **A page built from host components** — one `Card` containing a `Popover`
-  (host-positioned, no `getBoundingClientRect` math), a `Progress` bar, a
-  `Table` that swaps to `Empty` when there's nothing to show, and `Kbd` for a
-  keyboard hint. Each part is independent: delete the ones you don't want.
-- **Toasts** — the page's Clear button calls `host.toast.success` and
-  `host.toast.error`. The host mounts the single `<Toaster/>`, so there is
-  nothing to render and it works from anywhere, modals included.
-- **Locale-aware timestamps** — `host.utils.formatRelativeTime` renders each
-  row's "seen" column through `Intl.RelativeTimeFormat`, and `host.utils.cn`
-  merges conditional classes the same way the host components do.
-- **Live theme** — `host.onThemeChange` keeps a readout in the popover current
-  when the user flips light/dark.
-- **Chat toolbar action** — one component registration uses `host.ui.Action`
-  when the host provides it and keeps the legacy button on older supported
-  hosts. The composer passes `{ sessionId, taskId, taskTitle }` as `slotProps`.
-- **Live WS-driven page** — a `registerWsHandler("task.created", ...)`
-  handler updates module state that the page re-renders from, live, with no
-  reload.
-- **Backend event handling with Host state** — `OnEvent` counts `task.created`
-  deliveries in a persistent counter via the `Host.GetState`/`SetState` round
-  trip, so restarts don't reset it.
-- **Backend webhook** — `HandleWebhook` logs the `ping` request and returns a
-  greeting from the operator settings. Its access is public and declared in
-  the manifest. See [Webhook access](#webhook-access) before you copy it.
-- **Operator settings (`config_schema`)** — a `greeting` string and a secret
-  `api_token`, rendered as a form at **Settings > Plugins > Template Plugin**.
-  The plugin reads `greeting`; `api_token` only demonstrates secret-field
-  handling and is not used by this example.
+Feature-complete for its first release, not released yet. Until Kandev ships a
+release without its built-in Azure DevOps integration, the built-in
+integration remains the supported path.
 
-Source-control providers need several newer hooks that would swamp this default
-starter. The compile-tested [provider-neutral source-control recipe](recipes/source-control/README.md)
-shows repository search/paging/inspection/branches/create, task Link and unlink,
-review status and responsive Review UI, composer `#` references, cancellation,
-and unload fencing. It is opt-in and intentionally excluded from the generated
-package until you copy its declarations and adapters into your plugin.
+- **Connection:** Settings > Integrations > Azure DevOps connects a workspace
+  with a Personal Access Token or a Microsoft account. It tests the
+  connection, picks a default project, copies settings from another workspace
+  (never a token), and removes it. A health probe runs every 90 seconds.
+- **Enable switch:** the integrations card and the settings header turn the
+  integration on or off per workspace and per user. It only controls the
+  settings menu badge and row; connections, watches, and credentials keep
+  working while it is off.
+- **Microsoft account:** sign-in runs in a popup with PKCE and returns to the
+  settings page's own address; a paste panel completes it when the popup
+  cannot return. Tokens renew under a per-workspace lock, a rejected request
+  is retried once after renewal, and sign-out keeps the settings. The
+  application (client) ID comes from the workspace form, then the application
+  that signed in, then the operator setting `default_oauth_client_id`. Register
+  the page origin (for example `http://localhost:38429`) as a redirect URI of
+  that application.
+- **Browse:** the Azure DevOps page offers Boards, Sprints, work-item search,
+  and pull requests, with project, team, and board scopes, saved views, query
+  presets, and quick actions, on desktop and phone. Board and sprint cards
+  offer the same task actions as work-item results.
+- **Teams and sprints:** team selectors list your teams first under **My
+  teams** and remember the team you last chose in each project. Work items can
+  be narrowed to a team's areas and one of its sprints. **Sprints** shows a
+  sprint as a read-only taskboard: one row per backlog item with its tasks in
+  the team's taskboard columns, past, current, and future sprints with their
+  dates and working days left, and a person filter. "My teams" are the teams
+  of the identity behind the connection, so with a shared Personal Access
+  Token they are the token owner's teams.
+- **Board card children:** a Board card shows how many of its child work
+  items are done (an epic's features, a feature's stories, a story's tasks)
+  and expands to list them, each opening its detail and offering task
+  actions; a child with children expands the same way, down to the tasks.
+  **Expand all** is remembered per board. The task backlog level is
+  not offered as a board; its tasks are on the Sprints taskboard.
+- **Tasks and links:** start a task from a work item or pull request in
+  Kandev's task dialog and it is linked. A task's **Link** menu offers **Azure
+  DevOps Pull Request** and **Azure DevOps Work Item**. Linked pull requests
+  show their state, checks, and reviews in the task indicators and the review
+  panel. **Create PR** opens an Azure Repos pull request from the task branch
+  and links it, with the task's linked work items attached.
+- **References and agent tool:** the composer offers `#` references to work
+  items and pull requests. Agents get a `create_pull_request` tool that opens
+  and links a pull request from a pushed branch, without the `az` CLI or a
+  credential in their environment.
+- **Watches:** work-item (WIQL) and pull-request watches create one task per
+  matching item with the chosen workflow, step, agent and executor profiles,
+  prompt, repository, and base branch. Watches can be run now, reset, and
+  limited to a number of open tasks.
+- **Repository provider:** `azure_devops` repositories are listed, inspected,
+  and given branch lists through the plugin, including repositories recorded
+  by the former built-in integration.
+- **Git credentials:** task sessions clone, fetch, and push through the Kandev
+  credential broker with the workspace token.
 
-## Make it yours
+### Known differences from the built-in integration
 
-The plugin **id** appears in four places that must stay in sync. Rename all of
-them from `kandev-plugin-template` to your own id (e.g. `kandev-plugin-acme`):
+These follow from the host contracts available to plugins today:
 
-1. `manifest.yaml` — `id`, plus `display_name` / `description` / `author`.
-2. `go.mod` — the `module` line.
-3. `Makefile` — `BIN` and `VERSION` to match the manifest. The package name
-   is derived from them.
-4. `ui/bundle.js` — the id passed to `window.registerKandevPlugin(...)`.
+- Linked pull requests do not feed the task delivery ledger, and watch-created
+  tasks are not classified as review-watch or issue-watch tasks in the sidebar.
+- Watches can only launch with shared agent and executor profiles. When a
+  profile stops being available, the watch is disabled and settings say why.
+- Kandev does not let plugins delete tasks, so watches have no cleanup policy:
+  deleting or resetting a watch keeps the tasks it created.
+- The enable switch cannot remove the Azure DevOps entry from the main
+  sidebar, because Kandev has no way for a plugin to hide its navigation item.
+  With "Hide disabled integrations" on, only the settings menu row is hidden.
+- Settings, watches, and saved views are not migrated from the built-in
+  integration. Reconnect and recreate them after installing the plugin.
 
-Then trim the scaffolding: drop the webhook / event / config blocks in
-`manifest.yaml` you don't use, delete the matching handlers in
-`server/plugin.go`, and keep only the `registry.register*` calls in
-`ui/bundle.js` your plugin actually contributes. Update `server/plugin_test.go`
-to cover what remains.
+## Requirements
 
-If you are building a Git provider, opt into `recipes/source-control/` as one
-cohesive slice. Do not activate only its UI or only its manifest fragment:
-provider ownership, declared actions, backend optional interfaces, and frontend
-registrations are one contract.
+- Kandev with the plugin SDK this repository pins (see
+  [Develop against the SDK](#develop-against-the-sdk)). The manifest's
+  `min_kandev_version` is raised at release to the first Kandev release
+  without the built-in integration.
+- Executors other than local and worktree (Docker, remote Docker, SSH,
+  Kubernetes, Sprites) obtain Git credentials from the credential broker. They
+  require `githubCredentialBroker.publicBaseUrl` to be an HTTPS URL reachable
+  from the executor, as for the Bitbucket plugin.
 
-The page in `ui/bundle.js` is deliberately built from independent parts —
-`AboutPopover`, the `Progress` block, `RecentTasksTable`, `EmptyState`, the
-Clear button — so you can delete any of them without unpicking the others.
-Adjust `min_kandev_version` in `manifest.yaml` to match whatever you keep.
-The Action recipes and repository conventions are in
-[docs/repository-baseline.md](docs/repository-baseline.md).
+## Develop against the SDK
 
-## Use the host's React — and the host's recharts
+The plugin uses the published SDKs at exact versions: the Go module
+`github.com/kdlbs/kandev/pluginsdk` `v0.2.0` and the npm package
+`@kdlbs/plugin-sdk` `0.2.0`. Both require Kandev 0.100.0 or later, which is
+the `min_kandev_version` floor in `manifest.yaml`. Upgrade them together, then
+rerun the compatibility check, the tests, and a smoke test on the declared
+minimum host:
 
-`initialize(registry, host)` hands you `host.React` (and `host.jsx`, an alias
-for `host.React.createElement`). Use it. **Never import or bundle your own
-React**: a second React instance has its own hook dispatcher and context
-registry, so host components rendered inside your tree lose their providers,
-refs break, and `asChild` stops composing.
-
-The same hazard applies to **recharts**, which is why the host exposes
-`ChartContainer`, `ChartTooltip`, `ChartTooltipContent`, `ChartLegend`,
-`ChartLegendContent` and `ChartStyle` through `host.ui` rather than leaving you
-to install it: recharts resolves its tooltips and legends through its own React
-context and renders them into portals, so a bundled second copy splits exactly
-what the host copy is holding. It costs nothing to use the host's — recharts is
-already a dependency of the app. The same reasoning covers every
-Radix/portal/context-based package. Pure-React libraries (`@tabler/icons-react`,
-say) bundle fine, but this template ships hand-drawn inline SVG so it needs no
-bundler at all.
-
-`host.ui` is much broader than what this template uses — `Accordion*`,
-`Collapsible*`, `Select*`, `Tabs*`, `Sheet*`, `Pagination*`, `ScrollArea`,
-`Skeleton`, `Switch`, `Spinner`, `TooltipProvider`, plus kandev's own
-`PageTopbar`, `Combobox` and `TaskCreateDialog`. Check it before hand-rolling a
-component: the published plugins that hand-rolled progress bars and popovers
-did so only because this template used to stop at `Button`. The authoritative
-list is `PLUGIN_UI` in `apps/web/lib/plugins/host-api.ts`.
-
-## Webhook access
-
-The manifest uses `api_version: 1` and sets `access: "public"` explicitly.
-For API v1, an omitted access field keeps the legacy public default. Current
-API v2 uses an authenticated default. Keep the explicit value when you adapt
-the manifest. Read the [pinned authoring contract](https://github.com/kdlbs/kandev/blob/570600439036e81f8e9e1c63f15c4abce8a6c846/docs/public/plugins-authoring.md)
-for the current rules.
-
-```yaml
-webhooks:
-  - key: "ping"
-    method: "POST"
-    access: "public"
+```bash
+go run github.com/kdlbs/kandev/pluginsdk/cmd/kandev-sdk-check@v0.2.0 \
+  --manifest manifest.yaml --frontend-sdk node_modules/@kdlbs/plugin-sdk
 ```
 
-The `ping` handler in this template does not authenticate the caller. It logs
-the request body and returns a greeting. Add sender verification before you
-use this pattern for a public service. The `api_token` setting is not a
-verification mechanism in this example.
+CI, build, and release workflows run the same check after installing
+dependencies.
 
-| `access:`       | Caller                                           | Body limit |
-| --------------- | ------------------------------------------------ | ---------- |
-| `public`        | Anonymous service. Check a provider signature or shared secret in your handler. | 4 MiB |
-| `authenticated` | Kandev session or PAT. Use it for your scripts and CI. | 16 MiB |
+Packaging and the packaged-host tests still use a sibling Kandev checkout for
+`cmd/plugin-pack` and the disposable host:
 
-If you want to call your plugin from your **own** frontend bundle, neither is
-right: declare an `actions:` entry instead. The host authenticates and
-authorizes those and passes a verified resource context to your backend, and
-`host.api.fetch` is documented as MUST NOT target a public webhook path.
-
-## Minimum host version
-
-`manifest.yaml` declares `min_kandev_version: "0.86.0"` — the first release
-carrying the `host.ui` primitives, `host.toast` and `host.utils` that
-`ui/bundle.js` calls. A release host compares it against its own version at
-install time and refuses an older one, so an operator gets a clear error
-instead of a plugin that loads and then breaks on a missing API.
-
-Raise it as you adopt newer host APIs; lower or drop it if you strip the bundle
-back to the pre-0.86 surface (`Button`, `Card*`, `Tooltip*`).
-
-The source-control recipe uses post-v0.87.1 contracts and therefore cannot use
-this default `0.86.0` floor. Its README records the pinned source contract; set
-an activated provider plugin's minimum to the first release containing those
-hooks.
-
-Two caveats worth knowing:
-
-- The check only became load-bearing in 0.86.0. Earlier hosts parsed the field
-  and ignored it, so it can't protect you from a host old enough to have that
-  bug — a reason to declare it, not to skip it.
-- It is **release-only by design**. A host built from a git checkout reports a
-  git-describe version like `v0.87.1-27-g4705f1fd0`, which isn't a release
-  version, so the gate is skipped and the install succeeds whatever floor you
-  declare. A successful sideload onto your dev instance is not evidence that
-  your floor is correct — check it against the kandev history instead
-  (`git merge-base --is-ancestor <commit> <tag>`).
-
-## How a plugin runs (gRPC subprocess, not HTTP)
-
-kandev spawns the platform-matching binary from `runtime.executables` in
-`manifest.yaml` as a subprocess and talks to it over a private gRPC connection
-([hashicorp/go-plugin](https://github.com/hashicorp/go-plugin)) — there is no
-HTTP listen address, no shared secret, and no manual wiring: `pluginsdk.Serve`
-in `server/main.go` owns the entire transport. The base interface has two RPCs
-and gives you a `Host` handle back:
-
-```go
-type Plugin interface {
-    OnEvent(ctx context.Context, e *Event) error
-    HandleWebhook(ctx context.Context, req *WebhookRequest) (*WebhookResponse, error)
-}
+```text
+parent/
+├── kandev/                        # https://github.com/kdlbs/kandev
+│   └── apps/backend/              # provides cmd/plugin-pack
+└── kandev-plugin-azure-devops/    # this repository
 ```
 
-`server/plugin.go`'s `templatePlugin` embeds `pluginsdk.UnimplementedPlugin`
-(a no-op default for both RPCs, plus `Host()`/`SetHost()` accessors) and
-overrides what it needs. `server/main.go` is just
-`pluginsdk.Serve(&templatePlugin{})`.
-
-Newer features are additive optional interfaces. For example, the
-source-control recipe implements `pluginsdk.ActionHandler`,
-`pluginsdk.EntityReferenceSearcher`, and
-`pluginsdk.EntityReferenceAuthorizer`; a provider that needs transient Git
-credentials can separately implement `GitCredentialResolver` and
-`GitCredentialBinder`. Embedding the no-op base preserves the minimal plugin.
-
-## Developing against the SDK
-
-`pkg/pluginsdk` is not published as its own module yet, so `go.mod` here uses a
-local `replace`:
-
-```
-replace github.com/kandev/kandev => ../kandev/apps/backend
-```
-
-This assumes your plugin repo is checked out as a **sibling** of the `kandev`
-monorepo. `.kandev-sdk-ref` records the exact source revision for Go and
-TypeScript contracts:
-
-```
-some-dir/
-├── kandev/                   # https://github.com/kdlbs/kandev, Go module at apps/backend/
-└── kandev-plugin-template/   # this repo
-```
-
-Use these commands to create the sibling layout and select the pinned source:
-
-```sh
-git clone https://github.com/kdlbs/kandev.git kandev
-git clone https://github.com/kdlbs/kandev-plugin-template.git kandev-plugin-template
-git -C kandev checkout "$(cat kandev-plugin-template/.kandev-sdk-ref)"
-```
-
-Note the module root is `kandev/apps/backend`, not the repo root — `kandev` is
-a monorepo and the Go backend (including `pkg/pluginsdk`) lives one level down.
-Adjust the `replace` path if your layout differs. Once `pkg/pluginsdk` ships as
-a standalone, versioned module, this repo will drop the `replace` and pin a
-real version instead.
-
-The frontend recipe follows the same source-checkout model through
-`@kandev/plugin-sdk` in `package.json`. It is a type-only dependency. The
-default `ui/bundle.js` remains a dependency-free ES module. CI, package builds,
-and releases read the same `.kandev-sdk-ref` file. This source pin is separate
-from `min_kandev_version` in the runtime manifest. The template keeps its
-`0.86.0` floor because it selects the legacy button when `Action` is absent.
+If your Kandev checkout has another name, a `kandev` symlink next to this
+repository works. The build and release workflows check out `kdlbs/kandev` at
+the commit in `.kandev-sdk-ref` for that tooling. Update that pin to an exact
+reviewed commit, never a branch.
 
 ## Layout
 
+```text
+manifest.yaml               plugin contract (id, capabilities, UI bundle, icon)
+server/main.go              pluginsdk.Serve(plugin.NewRuntime())
+internal/azure/             Azure DevOps REST client (API 7.1), authorizers, remote URL parsing
+internal/auth/              Microsoft Entra tenant discovery, authorization, and tokens
+internal/store/             connection state and token secrets in Kandev Host storage
+internal/plugin/            runtime, actions, health poller, repositories, Git credentials,
+                            task links, review status, references, agent tool
+internal/watches/           work-item and pull-request watches and their poller
+internal/sourcecontrol/     provider-neutral repository, review, and reference boundary
+ui/src/                     frontend sources, bundled to ui/bundle.js by esbuild
+ui/e2e/                     packaged-host Playwright suite (desktop and phone)
+assets/                     marketplace icon and its notice
+scripts/                    package and release verifiers
+docs/specs/                 product requirements and system designs
+docs/plans/                 implementation plan and work orders
 ```
-manifest.yaml          # plugin manifest — id, capabilities, runtime.executables, ui.bundle, config_schema
-server/
-  main.go              # pluginsdk.Serve wiring — no flags, no HTTP, no secrets
-  plugin.go            # templatePlugin: OnEvent / HandleWebhook
-  plugin_test.go       # tests against a fake Host, no subprocess spawn needed
-ui/
-  bundle.js            # hand-written, no-build ES module — the plugin's frontend half
-recipes/source-control/
-  manifest.fragment.yaml
-  server/              # provider-neutral backend ports and contract tests
-  ui/                  # typed native registrations and lifecycle tests
-package.json           # recipe-only TypeScript tests/types; no production bundle
-tsconfig.recipes.json  # strict public-SDK contract check
-```
-
-`ui/bundle.js` is hand-written, dependency-free ES module JavaScript. There is
-no build step: it ships byte-for-byte inside the package tar.gz, and kandev
-serves it directly. Edit the file and repackage — nothing else to run.
 
 ## Build and test
 
-Use Go 1.26.0 and a Node version allowed by `package.json`. The CI workflows use
-Node 24. Install the locked UI test dependencies from the plugin directory.
+Requires Go 1.26 and Node 20.19 or 22.12 and later.
 
 ```sh
-npm ci --ignore-scripts
-make check-format
-go mod tidy
-git diff --exit-code -- go.mod go.sum
-make vet
-make test
-make audit-recipes
-make build
+npm ci
+make test          # Go tests, UI typecheck/build/tests, verifier tests
+make check-format vet
+make audit         # npm audit --audit-level=high
 ```
 
-`make test` runs backend and recipe tests, recipe type checking, the Action
-fallback test, and negative package and release-version checks. The package
-checks do not replace a disposable-host smoke test.
+### End-to-end tests
 
-> Note: bare `go build ./server/...` (no `-o`) fails with `build output
-> "server" already exists and is a directory` — Go's default output name for a
-> lone main package is the last path element ("server"), which collides with
-> the `server/` source directory. Always pass `-o`, run `go build .` from
-> inside `server/`, or use `make build`. `go vet`/`go test` are unaffected.
+`make e2e` packages the plugin for the current platform and runs the
+Playwright suite on a desktop and a phone project. It starts a disposable
+Kandev host from the sibling checkout in mock mode, so it needs a built Kandev
+backend (`make -C ../kandev/apps/backend build`) and web app, and a Chromium for
+Playwright (`npx playwright install chromium`). Set `KANDEV_PLUGIN_E2E_URL` to
+run against a host you started yourself; it must be fresh and run with
+`KANDEV_E2E_MOCK=true` and `KANDEV_AZURE_DEVOPS_PLUGIN_MOCK=true`.
 
-## Package it
+If `npm install` reports `ETARGET` for a version that exists, the npm cache is
+stale. Retry with `npm install --prefer-online`.
+
+## Package
 
 ```sh
-make package        # cross-compiles linux/darwin (amd64+arm64) + windows/amd64,
-                    # then packs manifest + ui/ + binaries into a versioned .tar.gz
-
-make package-host   # host platform only — faster local iteration
-make verify-package # build + validate the five-platform archive
-make verify-package-host # build + validate the host-platform archive
+make package          # all five platforms
+make package-host     # current platform only
+make verify-package   # package and verify the archive inventory and checksums
 ```
 
-Both stage `manifest.yaml` and `ui/` beside the freshly built
-`server/plugin-<goos>-<goarch>[.exe]` binaries. Kandev's `cmd/plugin-pack`
-computes `checksums.txt` and writes the archive. The verifier checks every
-manifest-declared binary, the UI bundle, the exact file list, and all checksums.
-It rejects recipe and development files even when their checksums are valid.
+Packaging runs `cmd/plugin-pack` from the sibling Kandev backend and writes
+`kandev-plugin-azure-devops-<version>.tar.gz`. The archive carries `LICENSE`
+and `NOTICE.md` next to the manifest, and the verifier requires both with
+their checksums.
 
-The Makefile runs `plugin-pack` with `cd $(KANDEV_SDK) && go run
-./cmd/plugin-pack`, from inside the sibling kandev checkout, rather than as
-`go run github.com/kandev/kandev/cmd/plugin-pack` from here. The second
-spelling resolves plugin-pack's dependencies against *this* module's `go.sum`,
-and plugin-pack reaches much further into the kandev backend than `server/`
-does — so those entries are missing and packaging fails with `missing go.sum
-entry`. Pulling them in would force this template's `go.sum` to track every
-dependency the kandev backend grows. Building the tool where it lives keeps
-`go.sum` scoped to what your plugin actually imports.
+## Install into Kandev
 
-## Install it against a running Kandev
-
-The manifest requires Kandev 0.86.0 or later. It packages Linux amd64 and
-arm64, macOS amd64 and arm64, and Windows amd64 binaries. It requests access to
-`task.created` events and plugin-scoped state. The `ping` webhook is public.
-
-Either through the UI (**Settings > Plugins > Install plugin**, URL or file
-upload), or directly:
+Install through **Settings > Plugins > Install plugin** (file upload or URL),
+or with the API:
 
 ```sh
-curl -F package=@kandev-plugin-template-0.1.0.tar.gz \
+curl -F package=@kandev-plugin-azure-devops-0.1.0.tar.gz \
   http://localhost:<kandev-port>/api/plugins/install
 ```
 
-Kandev verifies the package checksums, validates the manifest, extracts the
-package, and starts the host-matching binary. An unsigned package is marked
-unsigned in **Settings > Plugins**. Checksums detect file changes against the
-included checksum list and can catch accidental corruption. They do not prove
-who published the package. A
-directory sideload is a different flow: Kandev registers it as disabled and
-does not start it.
-Reinstalling the same version returns 409 — bump `version` in `manifest.yaml`.
+Kandev verifies the package checksums and manifest, extracts the package, and
+starts the binary for the host platform. Reinstalling the same version returns
+409; bump `version` in `manifest.yaml` and `VERSION` in the `Makefile`.
 
-## Publish a release
+## Release
 
-Pull requests run CI, UI and backend tests, and full platform packaging. The
-release workflow supports a manual version bump from `main` and a pushed
-`vX.Y.Z` tag. Both paths run format, vet, test, audit, and package checks before
-GitHub creates a release. Manual releases update the manifest and Makefile,
-then create a commit and matching tag only after those checks pass.
-
-- `kandev-plugin-template-<version>.tar.gz` — the plugin package with its own
-  `checksums.txt`, which Kandev checks during installation.
-- `checksums.txt` — the package's internal file checksums plus the SHA-256
-  checksum of the published package archive.
-
-In GitHub Actions, open the release workflow from `main`. Choose a version
-bump. Set `dry_run` to `true` to preview the version without publishing.
-
-The tag path requires the tag, manifest version, Makefile version, and package
-manifest to match. To change the SDK source pin, select an exact reviewed host
-commit, update `.kandev-sdk-ref`, then run the documented checks. Do not infer
-a runtime release number from that source commit.
+Pull requests run CI (tidy, format, vet, tests, audit) and full platform
+packaging. The release workflow accepts a manual version bump from `main` or a
+pushed `vX.Y.Z` tag. Both paths run the same checks, then publish the package
+and its `checksums.txt` to a GitHub release.
 
 ## License
 
-MIT — see [LICENSE](LICENSE). This template is meant to be copied and made your
-own; your resulting plugin can carry whatever license you choose.
+GNU Affero General Public License, version 3 only (AGPL-3.0-only), the same
+license as Kandev and its plugin SDKs. See [LICENSE](LICENSE). Portions derived
+from the MIT-licensed Kandev plugin template keep their notice in
+[NOTICE.md](NOTICE.md). The marketplace icon is a Microsoft trademark; see
+[assets/NOTICE.md](assets/NOTICE.md).

@@ -6,7 +6,10 @@ existing identity, settings, permissions, provider behavior, and translations.
 
 ## Host source pin and runtime floor
 
-`.kandev-sdk-ref` pins the Go and frontend SDK source to
+The plugin now depends on the published SDKs (`pluginsdk` `v0.2.0` and
+`@kdlbs/plugin-sdk` `0.2.0`); `.kandev-sdk-ref` pins only the Kandev checkout
+used for packaging tooling. It previously pinned the Go and frontend SDK
+source to
 `570600439036e81f8e9e1c63f15c4abce8a6c846`. This host commit merged PR #3943,
 which adds `host.ui.Action` and `host.ui.ActionGroup`. The previous source pin,
 `f218880ecbaa3d019d65b5d84fca6bdf160eced6`, predates those exports.
