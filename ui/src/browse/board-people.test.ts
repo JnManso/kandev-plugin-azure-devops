@@ -66,11 +66,11 @@ describe("boardPersonFilter", () => {
     expect(boardPersonFilter(UNASSIGNED_PERSON, [], true).person).toBe(UNASSIGNED_PERSON);
   });
 
-  it("keeps a remembered person, as an option, until the children settle", () => {
+  it("keeps a remembered person, as an option, until the children are complete", () => {
     expect(boardPersonFilter("Rui", ["Ana"], false)).toEqual({ person: "Rui", people: ["Ana", "Rui"] });
   });
 
-  it("shows all people once the children settle without the remembered person", () => {
+  it("shows all people once the complete children do not name the remembered person", () => {
     expect(boardPersonFilter("Rui", ["Ana"], true)).toEqual({ person: ANY_OPTION, people: ["Ana"] });
   });
 });

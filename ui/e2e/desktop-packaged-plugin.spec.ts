@@ -347,7 +347,10 @@ test("shows the cards before their children and says when children are unavailab
 });
 
 const savedBoardPerson = (page: Page) =>
-  page.waitForRequest((request) => request.method() !== "GET" && (request.postData() ?? "").includes('"personByBoard"'));
+  page.waitForResponse((response) => {
+    const request = response.request();
+    return request.method() !== "GET" && (request.postData() ?? "").includes('"personByBoard"') && response.ok();
+  });
 
 async function chooseBoardPerson(page: Page, person: string) {
   const saved = savedBoardPerson(page);

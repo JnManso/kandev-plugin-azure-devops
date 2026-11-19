@@ -131,5 +131,12 @@ Tasks 10 (person selector) and 11 (children index read for every card).
   Kandev `v0.102.0-1-g4cdec16377` build (`KANDEV_APPS_DIR` and
   `KANDEV_BACKEND` pointed at that checkout, as it is not the worktree's
   sibling).
+- 2026-11-19, review follow-up (PR #5): the card level is read in batches
+  of 1,000 (`nextChildReadIds`), so boards with more than 1,000 cards read
+  every card's children; the remembered person falls back to **All people**
+  only when that level is complete (`cardChildrenComplete`: every card read,
+  no failed or truncated read); the E2E helper waits for the preference
+  write's response. `board-children.test.ts` replaces the `childParentIds`
+  case with 4 cases that failed before the change.
 - Lifecycle evidence: not applicable; the change is a UI filter and touches no
   scheduling, background delivery, or task/session lifecycle.

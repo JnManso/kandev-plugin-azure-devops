@@ -56,8 +56,9 @@ categories from a per-type map.
 The Board requests `boards.children` with the snapshot's card IDs after the
 snapshot renders, so the counts never delay the cards; a new set of cards
 requests them again (moving a card does not), and a stale request is aborted.
-The UI sends at most 1,000 card IDs, which `boards.children` enforces, and
-reports `truncated` itself beyond that. A card with children shows a toggle in
+The UI reads the card level in batches of at most 1,000 card IDs, which
+`boards.children` enforces, so every card's children are read on larger
+boards. A card with children shows a toggle in
 its footer, `{type}: {done}/{total}` when all children share a work-item type
 and the localized "Child items: {done}/{total}" otherwise. The toggle and
 the child lines stop pointer and keyboard events, so they never open or drag
@@ -115,10 +116,11 @@ this board for this person." under the selectors.
 The person is stored per board in the browse preference as
 `personByBoard: Record<boardChildrenKey, person>`, beside `expandChildren`,
 and written only when the user picks a person. The selector shows
-`knownPerson(stored, people)` once the board's first child level has settled
-(read, failed, or a board without cards); before that it shows the stored
-person, so a person found only on children is not dropped while the children
-load. A remembered person missing from the board therefore shows **All
+`knownPerson(stored, people)` once the board's first child level is complete
+(every card read, no failed read, and no read truncated by the 1,000-child
+bound); until then it shows and lists the stored person, so a person found
+only on children is not dropped while the children load or when some of them
+cannot be read. A remembered person missing from the board therefore shows **All
 people** without overwriting the stored value. On a phone the Board
 selectors stack full width, as in Sprints.
 

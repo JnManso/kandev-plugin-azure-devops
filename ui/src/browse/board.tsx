@@ -458,7 +458,7 @@ function useBoardPersonFilter(
   remembered: string | undefined,
 ) {
   const known = useMemo(() => boardPeople(items ?? [], children.byParent), [children.byParent, items]);
-  const { person, people } = boardPersonFilter(remembered, known, children.settled);
+  const { person, people } = boardPersonFilter(remembered, known, children.complete);
   const cards = useMemo(
     () => filterCardsByPerson(items ?? [], children.byParent, person),
     [children.byParent, items, person],

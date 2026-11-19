@@ -44,16 +44,17 @@ export function filterCardsByPerson<T extends Assignable>(
 
 /**
  * The person the Board filters by and the people its selector lists. Until
- * the first child level settles, a remembered person stays selected (and
- * listed), since they may be assigned only to children; after that, a person
- * the board does not name shows all people. The remembered value is kept.
+ * every card's children are read in full, a remembered person stays selected
+ * (and listed), since they may be assigned only to children not read; after
+ * that, a person the board does not name shows all people. The remembered
+ * value is kept.
  */
 export function boardPersonFilter(
   remembered: string | undefined,
   people: string[],
-  settled: boolean,
+  complete: boolean,
 ): { person: string; people: string[] } {
-  if (settled) return { person: knownPerson(remembered, people), people };
+  if (complete) return { person: knownPerson(remembered, people), people };
   const person = remembered || ANY_OPTION;
   const pending = person !== ANY_OPTION && person !== UNASSIGNED_PERSON && !people.includes(person);
   return { person, people: pending ? [...people, person].sort(compareNames) : people };
