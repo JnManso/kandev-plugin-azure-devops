@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1] - 2026-11-19
+
+### Changed
+
+- fix: show the catalog icon in neutral gray (c9eefba)
+
+
 ## [0.1.0] - 2026-11-19
 
 ### Changed
