@@ -346,6 +346,69 @@ test("shows the cards before their children and says when children are unavailab
   await page.unroute("**/actions/boards.children");
 });
 
+const savedBoardPerson = (page: Page) =>
+  page.waitForRequest((request) => request.method() !== "GET" && (request.postData() ?? "").includes('"personByBoard"'));
+
+async function chooseBoardPerson(page: Page, person: string) {
+  const saved = savedBoardPerson(page);
+  await choose(page, "azure-board-person-select", person);
+  await saved;
+}
+
+test("filters the board by person, matching a card or its direct children", async ({ page }) => {
+  await openBoard(page, "Stories");
+  await expect(page.getByTestId("azure-board-children-toggle-101")).toBeVisible();
+  await page.getByTestId("azure-board-person-select").click();
+  await expect(page.getByRole("option")).toHaveText(["All people", "Unassigned", "Ada Reviewer", "Bruno Costa"]);
+  await page.keyboard.press("Escape");
+
+  await chooseBoardPerson(page, "Bruno Costa");
+  await expect(page.getByTestId("azure-board-card-101")).toBeVisible();
+  await expect(page.getByTestId("azure-board-children-toggle-101")).toHaveText("Task: 1/2");
+  await page.getByTestId("azure-board-children-toggle-101").click();
+  await expect(page.getByTestId("azure-board-children-101").locator('[data-testid^="azure-board-child-"]')).toHaveCount(2);
+  await page.getByTestId("azure-board-children-toggle-101").click();
+
+  await chooseBoardPerson(page, "Unassigned");
+  await expect(page.getByTestId("azure-board-card-101")).toHaveCount(0);
+  await expect(page.getByTestId("azure-board-no-person-cards")).toHaveText("No cards on this board for this person.");
+  await expect(page.getByTestId("azure-board-column-todo").getByText("0", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("azure-board-select")).toBeEnabled();
+
+  await chooseBoardPerson(page, "All people");
+  await expect(page.getByTestId("azure-board-card-101")).toBeVisible();
+  await expect(page.getByTestId("azure-board-no-person-cards")).toHaveCount(0);
+});
+
+test("lists the people of a board's cards and direct children, not grandchildren", async ({ page }) => {
+  await openBoard(page, "Features");
+  await expect(page.getByTestId("azure-board-children-toggle-102")).toBeVisible();
+  await page.getByTestId("azure-board-person-select").click();
+  await expect(page.getByRole("option")).toHaveText(["All people", "Unassigned", "Ada Reviewer"]);
+  await page.getByRole("option", { name: "Ada Reviewer" }).click();
+  await expect(page.getByTestId("azure-board-card-102")).toBeVisible();
+  await chooseBoardPerson(page, "All people");
+});
+
+test("remembers the person filter per board after a reload", async ({ page }) => {
+  await openBoard(page, "Stories");
+  await chooseBoardPerson(page, "Unassigned");
+  await expect(page.getByTestId("azure-board-no-person-cards")).toBeVisible();
+  await page.reload();
+  await expect(page.getByTestId("azure-board-select")).toContainText("Stories");
+  await expect(page.getByTestId("azure-board-person-select")).toContainText("Unassigned");
+  await expect(page.getByTestId("azure-board-no-person-cards")).toBeVisible();
+  await expect(page.getByTestId("azure-board-card-101")).toHaveCount(0);
+
+  await choose(page, "azure-board-select", "Features");
+  await expect(page.getByTestId("azure-board-person-select")).toContainText("All people");
+  await expect(page.getByTestId("azure-board-card-102")).toBeVisible();
+  await choose(page, "azure-board-select", "Stories");
+  await expect(page.getByTestId("azure-board-person-select")).toContainText("Unassigned");
+  await chooseBoardPerson(page, "All people");
+  await expect(page.getByTestId("azure-board-card-101")).toBeVisible();
+});
+
 test("shows a team without sprints, then a team's current sprint as a taskboard", async ({ page }) => {
   await page.goto("/azure-devops");
   await page.getByTestId("azure-devops-sprints-mode").click();

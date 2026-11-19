@@ -78,6 +78,8 @@ export function useBoardChildren(
 
   return {
     byParent: current.byParent,
+    /** Whether the cards' own children were read, failed, or there are no cards. */
+    settled: parents.ids.length === 0 || current.byParent.size > 0 || current.failed,
     failed: current.failed,
     truncated: parents.truncated || current.truncated,
     mergeChild,

@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Board person filter: the Board scope bar offers the Sprints person
+  selector after the board selector. A card is shown when it or one of its
+  direct children is assigned to the person, column counts follow the
+  filter, and the choice is remembered per board, on desktop and phone.
+
 ## [0.1.1] - 2026-11-19
 
 ### Changed

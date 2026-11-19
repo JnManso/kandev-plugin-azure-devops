@@ -8,7 +8,9 @@ import { Button } from "../host-ui";
 import { Card, CardContent, CardHeader, CardTitle } from "../host-ui";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "../host-ui";
 import { SearchablePicker, type PickerOption } from "./searchable-picker";
-import { teamPickerOptions } from "./sprints-model";
+import { personFilterOptions, teamPickerOptions } from "./sprints-model";
+import { boardPeople, boardPersonFilter, filterCardsByPerson } from "./board-people";
+import { cn } from "../cn";
 import { WorkItemTaskActions } from "./task-actions";
 import { CardChildrenList, CardChildrenToggle, type ChildTreeView } from "./board-card-children";
 import { everyCardExpanded, isCardExpanded } from "./board-children";
@@ -44,6 +46,9 @@ type Props = {
   /** Whether each board, by boardChildrenKey, opens with its cards expanded. */
   expandChildrenByBoard?: Record<string, boolean>;
   onExpandChildrenChange?: (key: string, expand: boolean) => void;
+  /** The person filter of each board, by boardChildrenKey. */
+  personByBoard?: Record<string, string>;
+  onPersonChange?: (key: string, person: string) => void;
 };
 
 /** The key a board's expand-all choice is stored under. */
@@ -231,6 +236,10 @@ function BoardSelectors({
   boardId,
   boards,
   onBoardChange,
+  person,
+  people,
+  onPersonChange,
+  isMobile,
 }: {
   projectId: string;
   projects: AzureDevOpsProject[];
@@ -241,17 +250,26 @@ function BoardSelectors({
   boardId: string;
   boards: Array<{ id: string; name: string }>;
   onBoardChange: (value: string) => void;
+  person: string;
+  people: string[];
+  onPersonChange: (value: string) => void;
+  isMobile: boolean;
 }) {
   const t = useT();
+  const personOptions = useMemo(
+    () => personFilterOptions(people, { all: t("allPeople"), unassigned: t("unassigned") }),
+    [people, t],
+  );
+  const picker = isMobile ? "w-full" : "w-52";
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className={cn("flex gap-2", isMobile ? "w-full flex-col" : "flex-wrap")} data-testid="azure-board-selectors">
       <SearchablePicker
         value={projectId}
         options={projects}
         onChange={onProjectChange}
         placeholder={t("project")}
         testId="azure-board-project-select"
-        className="w-52"
+        className={picker}
       />
       <SearchablePicker
         value={teamId}
@@ -259,7 +277,7 @@ function BoardSelectors({
         onChange={onTeamChange}
         placeholder={t("team")}
         testId="azure-board-team-select"
-        className="w-52"
+        className={picker}
         disabled={!teams.length}
       />
       <SearchablePicker
@@ -268,8 +286,17 @@ function BoardSelectors({
         onChange={onBoardChange}
         placeholder={t("board")}
         testId="azure-board-select"
-        className="w-52"
+        className={picker}
         disabled={!boards.length}
+      />
+      <SearchablePicker
+        value={person}
+        options={personOptions}
+        onChange={onPersonChange}
+        placeholder={t("person")}
+        testId="azure-board-person-select"
+        className={picker}
+        disabled={!boardId}
       />
     </div>
   );
@@ -318,23 +345,25 @@ function useBoardPreference(
   return { effectiveColumn, setSelectedColumn };
 }
 
-function useBoardGroups(snapshot: ReturnType<typeof useAzureDevOpsBoard>["snapshot"]) {
+function useBoardGroups(
+  snapshot: ReturnType<typeof useAzureDevOpsBoard>["snapshot"],
+  items: AzureDevOpsBoardWorkItem[],
+) {
   return useMemo(
     () =>
-      snapshot
-        ? groupAzureDevOpsBoardItems(snapshot.board, snapshot.items)
-        : new Map<string, AzureDevOpsBoardWorkItem[]>(),
-    [snapshot],
+      snapshot ? groupAzureDevOpsBoardItems(snapshot.board, items) : new Map<string, AzureDevOpsBoardWorkItem[]>(),
+    [items, snapshot],
   );
 }
 
 function useBoardPresentation(
   projectId: string,
   board: ReturnType<typeof useAzureDevOpsBoard>,
+  items: AzureDevOpsBoardWorkItem[],
   initialPreference: AzureDevOpsBoardPreference | undefined,
   onPreferenceChange: (preference: AzureDevOpsBoardPreference) => void,
 ) {
-  const groups = useBoardGroups(board.snapshot);
+  const groups = useBoardGroups(board.snapshot, items);
   const columns = board.snapshot?.board.columns ?? [];
   const columnPreference = useBoardPreference(
     projectId,
@@ -362,6 +391,8 @@ function useChildPresentation(
     onExpandChildrenChange?: (key: string, expand: boolean) => void;
     quickActions: AzureDevOpsActionPreset[];
     onStartTask?: (item: AzureDevOpsWorkItem, action?: AzureDevOpsActionPreset) => void;
+    personByBoard?: Record<string, string>;
+    onPersonChange?: (key: string, person: string) => void;
   },
 ) {
   const key = boardChildrenKey(projectId, board.teamId, board.boardId);
@@ -376,7 +407,8 @@ function useChildPresentation(
       .filter((id) => current.lines[id]),
   ];
   const children = useBoardChildren(workspaceId, projectId, board.snapshot?.items, expandedIds);
-  const parentIds = cardIds.filter((id) => !!children.byParent.get(id)?.length);
+  const filter = useBoardPersonFilter(board.snapshot?.items, children, options.personByBoard?.[key]);
+  const parentIds = filter.cards.map((item) => item.id).filter((id) => !!children.byParent.get(id)?.length);
   const allExpanded = everyCardExpanded(parentIds, expandAll, current.cards);
   const [detail, setDetail] = useState<AzureDevOpsChildCard | null>(null);
   const tree: ChildTreeView = {
@@ -397,6 +429,10 @@ function useChildPresentation(
     };
   };
   return {
+    cards: filter.cards,
+    person: filter.person,
+    people: filter.people,
+    setPerson: (person: string) => options.onPersonChange?.(key, person),
     failed: children.failed,
     truncated: children.truncated,
     hasChildren: parentIds.length > 0,
@@ -410,6 +446,24 @@ function useChildPresentation(
     setDetail,
     mergeChild: children.mergeChild,
   };
+}
+
+/**
+ * The board's cards for the selected person: a card matches when it or one of
+ * its direct children is assigned to them.
+ */
+function useBoardPersonFilter(
+  items: AzureDevOpsBoardWorkItem[] | undefined,
+  children: ReturnType<typeof useBoardChildren>,
+  remembered: string | undefined,
+) {
+  const known = useMemo(() => boardPeople(items ?? [], children.byParent), [children.byParent, items]);
+  const { person, people } = boardPersonFilter(remembered, known, children.settled);
+  const cards = useMemo(
+    () => filterCardsByPerson(items ?? [], children.byParent, person),
+    [children.byParent, items, person],
+  );
+  return { cards, person, people };
 }
 
 function ChildNotices({ failed, truncated }: { failed: boolean; truncated: boolean }) {
@@ -459,6 +513,8 @@ export function AzureDevOpsBoard({
   onTeamChosen,
   expandChildrenByBoard,
   onExpandChildrenChange,
+  personByBoard,
+  onPersonChange,
 }: Props) {
   const t = useT();
   const { isMobile } = useResponsiveBreakpoint();
@@ -469,14 +525,22 @@ export function AzureDevOpsBoard({
   );
   const [editing, setEditing] = useState<AzureDevOpsBoardWorkItem | null>(null);
   const [dragged, setDragged] = useState<AzureDevOpsBoardWorkItem | null>(null);
-  const presentation = useBoardPresentation(projectId, board, initialPreference, onPreferenceChange);
-  const selectedItem = board.snapshot?.items.find((item) => item.id === editing?.id) ?? editing;
   const childPresentation = useChildPresentation(workspaceId, projectId, board, {
     expandChildrenByBoard,
     onExpandChildrenChange,
     quickActions,
     onStartTask,
+    personByBoard,
+    onPersonChange,
   });
+  const presentation = useBoardPresentation(
+    projectId,
+    board,
+    childPresentation.cards,
+    initialPreference,
+    onPreferenceChange,
+  );
+  const selectedItem = board.snapshot?.items.find((item) => item.id === editing?.id) ?? editing;
   if (!projectId) return <BoardEmptyState projects={projects} onProjectChange={onProjectChange} />;
   return (
     <section
@@ -497,6 +561,10 @@ export function AzureDevOpsBoard({
         boardId={board.boardId}
         boards={board.boards}
         onBoardChange={board.setBoardId}
+        person={childPresentation.person}
+        people={childPresentation.people}
+        onPersonChange={childPresentation.setPerson}
+        isMobile={isMobile}
       />
         {childPresentation.hasChildren && (
           <Button
@@ -529,6 +597,11 @@ export function AzureDevOpsBoard({
       {!board.loading && board.snapshot && (
         <>
           <ChildNotices failed={childPresentation.failed} truncated={childPresentation.truncated} />
+          {board.snapshot.items.length > 0 && childPresentation.cards.length === 0 && (
+            <p className="px-1 text-sm text-muted-foreground" data-testid="azure-board-no-person-cards">
+              {t("noBoardCardsForPerson")}
+            </p>
+          )}
           {isMobile && (
             <MobileColumnNavigator
               columns={presentation.columns}

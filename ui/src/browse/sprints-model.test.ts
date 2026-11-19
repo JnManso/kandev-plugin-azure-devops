@@ -5,7 +5,10 @@ import {
   defaultIterationId,
   sprintDateRange,
   filterRowsByPerson,
+  isAssignedTo,
   iterationTimeFrameKey,
+  knownPerson,
+  personFilterOptions,
   teamPickerOptions,
   tasksInColumn,
   teamScopeConditions,
@@ -136,6 +139,41 @@ describe("filterRowsByPerson", () => {
   it("filters unassigned tasks", () => {
     const unassigned = filterRowsByPerson(rows, UNASSIGNED_PERSON);
     expect(unassigned.map((row) => [row.parent?.id ?? 0, ...row.tasks.map((task) => task.id)])).toEqual([[0, 2], [11]]);
+  });
+});
+
+describe("isAssignedTo", () => {
+  it("matches the trimmed assignee, and an empty one for unassigned", () => {
+    expect(isAssignedTo({ assignedTo: " Ana " }, "Ana")).toBe(true);
+    expect(isAssignedTo({ assignedTo: "ana" }, "Ana")).toBe(false);
+    expect(isAssignedTo({ assignedTo: "  " }, UNASSIGNED_PERSON)).toBe(true);
+    expect(isAssignedTo({}, UNASSIGNED_PERSON)).toBe(true);
+    expect(isAssignedTo({ assignedTo: "Ana" }, UNASSIGNED_PERSON)).toBe(false);
+  });
+});
+
+describe("personFilterOptions", () => {
+  it("offers all people, unassigned, then each person by name", () => {
+    expect(personFilterOptions(["Ana", "Rui"], { all: "All people", unassigned: "Unassigned" })).toEqual([
+      { id: ANY_OPTION, name: "All people" },
+      { id: UNASSIGNED_PERSON, name: "Unassigned" },
+      { id: "Ana", name: "Ana" },
+      { id: "Rui", name: "Rui" },
+    ]);
+  });
+});
+
+describe("knownPerson", () => {
+  it("keeps all people, unassigned, and a listed person", () => {
+    expect(knownPerson(ANY_OPTION, ["Ana"])).toBe(ANY_OPTION);
+    expect(knownPerson(UNASSIGNED_PERSON, [])).toBe(UNASSIGNED_PERSON);
+    expect(knownPerson("Ana", ["Ana", "Rui"])).toBe("Ana");
+  });
+
+  it("falls back to all people for a missing or empty person", () => {
+    expect(knownPerson("Carla", ["Ana"])).toBe(ANY_OPTION);
+    expect(knownPerson("", ["Ana"])).toBe(ANY_OPTION);
+    expect(knownPerson(undefined, ["Ana"])).toBe(ANY_OPTION);
   });
 });
 

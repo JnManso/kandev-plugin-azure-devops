@@ -241,7 +241,8 @@ listings paged with `$top`/`$skip` (projects, teams) read the first page alone
 and later pages four at a time. Browse preferences are stored with
 `host.storage` (per user); the Board preference records the project and the
 names of the last team and board, so the Board loads them before the team list
-arrives. The UI shares one team listing per workspace and project for the page
+arrives. Per board, the preference also keeps the expand-all choice and the
+person filter ([board children](azure-devops-plugin-board-children.md#person-filter)). The UI shares one team listing per workspace and project for the page
 session. `pull_requests.people` reads the creators and reviewers of the
 repository's latest 300 pull requests of every status (pages of 100), so the
 creator and reviewer filters are name pickers that send the identity ID, with

@@ -43,6 +43,10 @@ catalog in **Settings > Plugins**.
   actions; a child with children expands the same way, down to the tasks.
   **Expand all** is remembered per board. The task backlog level is
   not offered as a board; its tasks are on the Sprints taskboard.
+- **Board person filter:** the Board offers the Sprints person filter after
+  the board selector (**All people**, **Unassigned**, or a person by name). A
+  card stays when it or one of its direct children is assigned to the
+  person, and the choice is remembered per board.
 - **Tasks and links:** start a task from a work item or pull request in
   Kandev's task dialog and it is linked. A task's **Link** menu offers **Azure
   DevOps Pull Request** and **Azure DevOps Work Item**. Linked pull requests

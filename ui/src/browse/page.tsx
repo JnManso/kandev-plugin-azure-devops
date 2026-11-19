@@ -527,6 +527,8 @@ function useAzureDevOpsPageState(workspaceId?: string) {
     rememberTeam: pagePreferences.rememberTeam,
     expandChildren: pagePreferences.expandChildren,
     rememberExpandChildren: pagePreferences.rememberExpandChildren,
+    personByBoard: pagePreferences.personByBoard,
+    rememberBoardPerson: pagePreferences.rememberBoardPerson,
     sprintsPreference: pagePreferences.sprints,
     setSprintsPreference: pagePreferences.setSprints,
     workItemActions: workspaceSettings.settings.workItemActions,
@@ -708,6 +710,8 @@ function AzureDevOpsPageContent({ workspaceId }: PageProps) {
           onTeamChosen={(teamId) => state.rememberTeam(state.filters.projectId, teamId)}
           expandChildrenByBoard={state.expandChildren}
           onExpandChildrenChange={state.rememberExpandChildren}
+          personByBoard={state.personByBoard}
+          onPersonChange={state.rememberBoardPerson}
         />
       )}
       {state.mode === SPRINTS_MODE && (

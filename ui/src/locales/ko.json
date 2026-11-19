@@ -188,6 +188,7 @@
   "newWatchTitle": "새 {{kind}} 감시",
   "nextBoardColumn": "다음 보드 열",
   "nextPullRequestPage": "다음 풀 리퀘스트 페이지",
+  "noBoardCardsForPerson": "이 보드에 이 담당자의 카드가 없습니다.",
   "noComments": "댓글이 없습니다.",
   "noDefaultProject": "기본 프로젝트 없음",
   "noDescription": "설명이 없습니다.",

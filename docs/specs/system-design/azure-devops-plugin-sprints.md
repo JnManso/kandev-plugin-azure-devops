@@ -82,7 +82,9 @@ from the current team areas.
 Browse preferences (`host.storage`, per user) gain
 `teamByProject: Record<projectId, teamId>` and the last Sprints selection
 (`iterationId`, person). The Board, Work items, and Sprints team selectors write
-the same map; the Board and Sprints read it to preselect a team. The sprint
+the same map; the Board and Sprints read it to preselect a team. The person
+options and matching live in `sprints-model.ts` and are shared with the Board
+person filter ([board children](azure-devops-plugin-board-children.md#person-filter)). The sprint
 selector opens on the stored sprint while it exists, else the current one.
 
 ## Taskboard UI
