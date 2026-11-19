@@ -16,9 +16,15 @@ import (
 	"kandev-plugin-azure-devops/internal/plugin"
 )
 
-// officialIconSHA256 pins assets/icon.svg to the unmodified Microsoft icon
-// recorded in assets/NOTICE.md.
-const officialIconSHA256 = "15b5068ceeb28f0f3cf566aa8cf99619f99d47059d7a91fda0ef47091a71a041"
+// iconSHA256 pins assets/icon.svg: the official Microsoft shape recorded in
+// assets/NOTICE.md, filled with iconFill.
+const iconSHA256 = "a069b591b94ace8577a6d34c85051e615abbaa52263aa4acbdbc6a8e50e36f2f"
+
+// officialIconPath is the unchanged shape of the official Azure DevOps icon.
+const officialIconPath = "M17,4v9.74l-4,3.28-6.2-2.26V17L3.29,12.41l10.23.8V4.44Zm-3.41.49L7.85,1V3.29L2.58,4.84,1,6.87v4.61l2.26,1V6.57Z"
+
+// iconFill is the neutral gray the catalog icon uses on light and dark themes.
+const iconFill = "#8a8a8a"
 
 type manifestIdentity struct {
 	ID         string   `yaml:"id"`
@@ -51,13 +57,16 @@ func TestManifestIdentityMatchesRuntimeAndMakefile(t *testing.T) {
 	require.Regexp(t, regexp.MustCompile(`(?m)^VERSION := `+regexp.QuoteMeta(manifest.Version)+`$`), string(makefile))
 }
 
-func TestManifestIconIsThePinnedOfficialMark(t *testing.T) {
+func TestManifestIconIsTheOfficialShapeInGray(t *testing.T) {
 	manifest := readManifest(t)
 	require.Equal(t, "assets/icon.svg", manifest.Icon)
 
 	icon, err := os.ReadFile(filepath.Join("..", filepath.FromSlash(manifest.Icon)))
 	require.NoError(t, err)
-	require.Equal(t, officialIconSHA256, fmt.Sprintf("%x", sha256.Sum256(icon)))
+	require.Equal(t, iconSHA256, fmt.Sprintf("%x", sha256.Sum256(icon)))
+	require.Contains(t, string(icon), `d="`+officialIconPath+`"`)
+	require.Equal(t, 1, strings.Count(string(icon), "fill="))
+	require.Contains(t, string(icon), `fill="`+iconFill+`"`)
 
 	var root struct{ XMLName xml.Name }
 	require.NoError(t, xml.Unmarshal(icon, &root))

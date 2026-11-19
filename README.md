@@ -5,9 +5,9 @@ delivered as a runtime plugin.
 
 ## Status
 
-Feature-complete for its first release, not released yet. Until Kandev ships a
-release without its built-in Azure DevOps integration, the built-in
-integration remains the supported path.
+Released as 0.1.0 for Kandev 0.102.0 and later, the first Kandev release
+without the built-in Azure DevOps integration. Install it from the plugin
+catalog in **Settings > Plugins**.
 
 - **Connection:** Settings > Integrations > Azure DevOps connects a workspace
   with a Personal Access Token or a Microsoft account. It tests the
@@ -81,10 +81,7 @@ These follow from the host contracts available to plugins today:
 
 ## Requirements
 
-- Kandev with the plugin SDK this repository pins (see
-  [Develop against the SDK](#develop-against-the-sdk)). The manifest's
-  `min_kandev_version` is raised at release to the first Kandev release
-  without the built-in integration.
+- Kandev 0.102.0 or later (`min_kandev_version` in `manifest.yaml`).
 - Executors other than local and worktree (Docker, remote Docker, SSH,
   Kubernetes, Sprites) obtain Git credentials from the credential broker. They
   require `githubCredentialBroker.publicBaseUrl` to be an HTTPS URL reachable
