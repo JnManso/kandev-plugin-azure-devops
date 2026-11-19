@@ -258,9 +258,9 @@ phone shows the same card inside the column navigator (001.5).
 
 - **Entra redirect.** The popup return to the plugin route origin must be
   revalidated against a real organization in task 03.
-- **Release ordering.** `min_kandev_version` follows the SDK floor (0.100.0)
-  until the Kandev release with the removal exists; it is raised to that
-  release before `v0.1.0`. Until the registry lists the plugin, users install
+- **Release ordering.** `min_kandev_version` is 0.102.0, the first Kandev
+  release without the built-in integration, so the plugin never installs
+  beside it. Until the registry lists the plugin, users install
   it from the built package.
 - **Executors.** Docker, SSH, and Kubernetes need the public HTTPS broker
   address for private Azure repos, as for Bitbucket. This is documented, not

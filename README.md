@@ -94,8 +94,9 @@ These follow from the host contracts available to plugins today:
 
 The plugin uses the published SDKs at exact versions: the Go module
 `github.com/kdlbs/kandev/pluginsdk` `v0.2.0` and the npm package
-`@kdlbs/plugin-sdk` `0.2.0`. Both require Kandev 0.100.0 or later, which is
-the `min_kandev_version` floor in `manifest.yaml`. Upgrade them together, then
+`@kdlbs/plugin-sdk` `0.2.0`. The plugin itself requires Kandev 0.102.0 or
+later (`min_kandev_version` in `manifest.yaml`), the first release without the
+built-in Azure DevOps integration. Upgrade the SDKs together, then
 rerun the compatibility check, the tests, and a smoke test on the declared
 minimum host:
 
