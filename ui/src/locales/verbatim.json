@@ -1,0 +1,49 @@
+{
+  "pt-pt": {
+    "azureDevOps": "Product name.",
+    "childCountTyped": "Placeholder frame; the type is the Azure DevOps work-item type name.",
+    "fallbackAuthor": "Product name used as the author fallback.",
+    "presetIconBug": "Kandev keeps the software term 'Bug' in European Portuguese.",
+    "prompt": "Kandev keeps this term in English in European Portuguese.",
+    "pullRequestFallbackTitle": "Kandev keeps this term in English in European Portuguese.",
+    "pullRequestKindLower": "Kandev keeps this term in English in European Portuguese.",
+    "pullRequestKindTitle": "Kandev keeps this term in English in European Portuguese.",
+    "pullRequestSubtitle": "Placeholder frame; PR is an acronym.",
+    "pullRequests": "Kandev keeps this term in English in European Portuguese.",
+    "pullRequestsTab": "Kandev keeps this term in English in European Portuguese.",
+    "sprint": "European Portuguese Azure DevOps and Scrum usage keeps the term 'Sprint'.",
+    "sprints": "European Portuguese Azure DevOps and Scrum usage keeps the term 'Sprints'."
+  },
+  "zh-cn": {
+    "azureDevOps": "Product name.",
+    "childCountTyped": "Placeholder frame; the type is the Azure DevOps work-item type name.",
+    "fallbackAuthor": "Product name used as the author fallback.",
+    "pullRequestSubtitle": "Placeholder frame; PR is an acronym."
+  },
+  "zh-hk": {
+    "azureDevOps": "Product name.",
+    "childCountTyped": "Placeholder frame; the type is the Azure DevOps work-item type name.",
+    "fallbackAuthor": "Product name used as the author fallback.",
+    "pullRequestSubtitle": "Placeholder frame; PR is an acronym."
+  },
+  "zh-tw": {
+    "azureDevOps": "Product name.",
+    "childCountTyped": "Placeholder frame; the type is the Azure DevOps work-item type name.",
+    "fallbackAuthor": "Product name used as the author fallback.",
+    "pullRequestSubtitle": "Placeholder frame; PR is an acronym."
+  },
+  "ja": {
+    "azureDevOps": "Product name.",
+    "childCountTyped": "Placeholder frame; the type is the Azure DevOps work-item type name.",
+    "fallbackAuthor": "Product name used as the author fallback.",
+    "presetIconBug": "Icon name; Kandev keeps it in English in Japanese.",
+    "presetIconEye": "Icon name; Kandev keeps it in English in Japanese."
+  },
+  "ko": {
+    "azureDevOps": "Product name.",
+    "childCountTyped": "Placeholder frame; the type is the Azure DevOps work-item type name.",
+    "fallbackAuthor": "Product name used as the author fallback.",
+    "pullRequestStatusAria": "Only the brand acronym and interpolated values; there is no prose to translate.",
+    "pullRequestSubtitle": "Placeholder frame; PR is an acronym."
+  }
+}

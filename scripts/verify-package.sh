@@ -15,15 +15,24 @@ mode=$2
 host_platform=${3-}
 [ -d "$package_dir" ] || fail "package directory not found: $package_dir"
 
-for required in manifest.yaml ui/bundle.js checksums.txt; do
+for required in manifest.yaml LICENSE NOTICE.md assets/icon.svg assets/NOTICE.md ui/bundle.js ui/plugin.css checksums.txt; do
 	[ -f "$package_dir/$required" ] || fail "missing required file: $required"
 done
 
+# plugin-pack -platform-only re-serializes the manifest: scalars lose their
+# quotes, nesting uses four spaces, and only the host executable remains.
+# Accept both the authored and the re-serialized form.
+grep -Ex 'id: "?kandev-plugin-azure-devops"?' "$package_dir/manifest.yaml" >/dev/null || fail 'manifest plugin id does not match this plugin'
+grep -Ex 'api_version: "?2"?' "$package_dir/manifest.yaml" >/dev/null || fail 'manifest API version is not supported'
+grep -Ex 'icon: "?assets/icon.svg"?' "$package_dir/manifest.yaml" >/dev/null || fail 'manifest icon path does not match the package'
+
 manifest_executables=$(awk '
-	$0 == "runtime:" { in_runtime = 1; next }
-	in_runtime && $0 == "  executables:" { in_executables = 1; next }
-	in_executables && $0 !~ /^    / { exit }
-	in_executables && /^    [[:alnum:]_-]+: "[^"]+"$/ {
+	function indent(line) { match(line, /^ */); return RLENGTH }
+	/^runtime:[[:space:]]*$/ { in_runtime = 1; next }
+	in_runtime && /^[^ ]/ { exit }
+	in_runtime && /^ +executables:[[:space:]]*$/ { in_executables = 1; executables_indent = indent($0); next }
+	in_executables && indent($0) <= executables_indent { in_executables = 0 }
+	in_executables && /^ +[[:alnum:]_-]+: +"?[^" ]+"?[[:space:]]*$/ {
 		platform = $1
 		sub(/:$/, "", platform)
 		path = $2
@@ -37,14 +46,22 @@ expected_executables=$(printf '%s\n' \
 	'linux-amd64 server/plugin-linux-amd64' \
 	'linux-arm64 server/plugin-linux-arm64' \
 	'windows-amd64 server/plugin-windows-amd64.exe' | LC_ALL=C sort)
-[ "$manifest_executables" = "$expected_executables" ] || fail 'manifest runtime.executables does not match the supported platform set'
 
 case "$mode" in
 	full)
+		[ "$manifest_executables" = "$expected_executables" ] || fail 'manifest runtime.executables does not match the supported platform set'
 		executable_paths=$(printf '%s\n' "$manifest_executables" | awk '{ print $2 }')
 		;;
 	host)
 		[ -n "$host_platform" ] || fail 'host mode requires a platform name'
+		[ -n "$manifest_executables" ] || fail 'manifest declares no runtime.executables'
+		saved_ifs=$IFS
+		IFS='
+'
+		for entry in $manifest_executables; do
+			printf '%s\n' "$expected_executables" | grep -Fx "$entry" >/dev/null || fail "unsupported runtime executable: $entry"
+		done
+		IFS=$saved_ifs
 		executable_paths=$(printf '%s\n' "$manifest_executables" | awk -v platform="$host_platform" '$1 == platform { print $2 }')
 		[ -n "$executable_paths" ] || fail "host platform is not declared: $host_platform"
 		;;
@@ -57,14 +74,14 @@ for executable in $executable_paths; do
 	[ -f "$package_dir/$executable" ] || fail "missing declared executable: $executable"
 done
 
-forbidden_path=$(find "$package_dir" \
-	\( -name recipes -o -name scripts -o -name node_modules \
-		-o -name package.json -o -name package-lock.json \
-		-o -name tsconfig.recipes.json -o -name '*.test.js' \) \
-	-print -quit)
-[ -z "$forbidden_path" ] || fail "forbidden recipe or development path: ${forbidden_path#"$package_dir"/}"
+unexpected_type=$(find "$package_dir" -mindepth 1 ! -type d ! -type f -print -quit)
+[ -z "$unexpected_type" ] || fail "package contains a non-file entry: ${unexpected_type#"$package_dir"/}"
 
-expected_files=$(printf '%s\n' manifest.yaml ui/bundle.js checksums.txt $executable_paths | LC_ALL=C sort)
+expected_directories=$(printf '%s\n' assets server ui | LC_ALL=C sort)
+actual_directories=$(cd "$package_dir" && find . -mindepth 1 -type d -print | sed 's#^\./##' | LC_ALL=C sort)
+[ "$actual_directories" = "$expected_directories" ] || fail 'package directory inventory does not match the supported layout'
+
+expected_files=$(printf '%s\n' manifest.yaml LICENSE NOTICE.md assets/icon.svg assets/NOTICE.md ui/bundle.js ui/plugin.css checksums.txt $executable_paths | LC_ALL=C sort)
 actual_files=$(cd "$package_dir" && find . -type f -print | sed 's#^\./##' | LC_ALL=C sort)
 [ "$actual_files" = "$expected_files" ] || {
 	printf 'unexpected package file inventory\nexpected:\n%s\nfound:\n%s\n' "$expected_files" "$actual_files" >&2
@@ -72,12 +89,12 @@ actual_files=$(cd "$package_dir" && find . -type f -print | sed 's#^\./##' | LC_
 }
 
 checksum_entries=$(awk '
-	NF != 2 { invalid = 1; next }
+	NF != 2 || length($1) != 64 || $1 !~ /^[0-9a-f]+$/ { invalid = 1; next }
 	{ print $2 }
 	END { if (NR == 0 || invalid) exit 1 }
 ' "$package_dir/checksums.txt") || fail 'checksums.txt has invalid lines'
 checksum_files=$(printf '%s\n' "$checksum_entries" | LC_ALL=C sort)
-expected_checksum_files=$(printf '%s\n' manifest.yaml ui/bundle.js $executable_paths | LC_ALL=C sort)
+expected_checksum_files=$(printf '%s\n' manifest.yaml LICENSE NOTICE.md assets/icon.svg assets/NOTICE.md ui/bundle.js ui/plugin.css $executable_paths | LC_ALL=C sort)
 [ "$checksum_files" = "$expected_checksum_files" ] || fail 'checksums.txt does not list every package file exactly once'
 
 if command -v sha256sum >/dev/null 2>&1; then
