@@ -1,7 +1,10 @@
 # Marketplace icon notice
 
-`icon.svg` is the official Azure DevOps service icon, used unmodified from
-Microsoft's Azure architecture icon package:
+`icon.svg` is the shape of the official Azure DevOps service icon from
+Microsoft's Azure architecture icon package, filled with a single neutral gray
+(`#8a8a8a`) instead of the original blue gradient so it matches Kandev's
+monochrome integration icons on light and dark themes. The shape is unchanged.
+The original file:
 
 - Source: <https://learn.microsoft.com/azure/architecture/icons/>
 - Package: <https://arch-center.azureedge.net/icons/Azure_Public_Service_Icons_V23.zip>
@@ -10,8 +13,7 @@ Microsoft's Azure architecture icon package:
 - SHA-256: `15b5068ceeb28f0f3cf566aa8cf99619f99d47059d7a91fda0ef47091a71a041`
 
 The plugin UI draws the same shape in the surrounding text color
-(`ui/src/azure-icon.ts`) so it matches Kandev's monochrome navigation icons;
-`icon.svg` itself is not modified.
+(`ui/src/azure-icon.ts`) for the same reason.
 
 The icon is provided under the Microsoft Terms of Use shipped in that package.
 Azure DevOps and the Azure DevOps logo are trademarks of Microsoft Corporation.
