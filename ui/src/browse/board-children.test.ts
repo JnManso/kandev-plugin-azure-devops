@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   MAX_CHILD_PARENTS,
+  applyChildRead,
   cardChildrenComplete,
   childSummary,
   childrenByParent,
@@ -76,6 +77,28 @@ describe("cardChildrenComplete", () => {
     expect(cardChildrenComplete([1, 2, 3], read, false, false)).toBe(false);
     expect(cardChildrenComplete([1, 2], read, true, false)).toBe(false);
     expect(cardChildrenComplete([1, 2], read, false, true)).toBe(false);
+  });
+});
+
+describe("applyChildRead", () => {
+  const empty = { byParent: new Map(), failed: false, truncated: false, cardFailed: false, cardTruncated: false };
+  const cards = new Set([1, 2]);
+
+  it("records a failed or truncated card read at the card level", () => {
+    const failed = applyChildRead(empty, [1, 2], null, cards);
+    expect(failed).toMatchObject({ failed: true, cardFailed: true });
+    expect(failed.byParent.get(1)).toEqual([]);
+    const truncated = applyChildRead(empty, [1, 2], { children: [], truncated: true }, cards);
+    expect(truncated).toMatchObject({ truncated: true, cardTruncated: true });
+  });
+
+  it("keeps a failed or truncated deeper read out of the card level", () => {
+    const read = applyChildRead(empty, [1, 2], { children: [{ parentId: 1, items: [child(11, "Task")] }] }, cards);
+    const failed = applyChildRead(read, [11], null, cards);
+    expect(failed).toMatchObject({ failed: true, cardFailed: false });
+    const truncated = applyChildRead(read, [11], { children: [], truncated: true }, cards);
+    expect(truncated).toMatchObject({ truncated: true, cardTruncated: false });
+    expect(cardChildrenComplete([1, 2], failed.byParent, failed.cardFailed, failed.cardTruncated)).toBe(true);
   });
 });
 

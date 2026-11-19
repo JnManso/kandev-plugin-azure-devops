@@ -117,8 +117,9 @@ The person is stored per board in the browse preference as
 `personByBoard: Record<boardChildrenKey, person>`, beside `expandChildren`,
 and written only when the user picks a person. The selector shows
 `knownPerson(stored, people)` once the board's first child level is complete
-(every card read, no failed read, and no read truncated by the 1,000-child
-bound); until then it shows and lists the stored person, so a person found
+(every card read, and no card-level read failed or was truncated by the
+1,000-child bound; failed or truncated reads of deeper levels keep their
+notice but do not hold the fallback); until then it shows and lists the stored person, so a person found
 only on children is not dropped while the children load or when some of them
 cannot be read. A remembered person missing from the board therefore shows **All
 people** without overwriting the stored value. On a phone the Board

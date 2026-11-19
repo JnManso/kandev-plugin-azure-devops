@@ -29,7 +29,39 @@ export function nextChildReadIds(
   return ids.slice(0, MAX_CHILD_PARENTS);
 }
 
-/** Whether every card's own children were read, without a failed or truncated read. */
+/** The children read so far, with failed or truncated reads overall and at the card level. */
+export type ChildReadState = {
+  byParent: Map<number, AzureDevOpsChildCard[]>;
+  failed: boolean;
+  truncated: boolean;
+  cardFailed: boolean;
+  cardTruncated: boolean;
+};
+
+/**
+ * The state after one read of the given IDs (null when it failed). A read of
+ * card IDs sets the card-level flags; a deeper read only sets the overall ones.
+ * Every card is requested before any deeper item, so a read is one or the other.
+ */
+export function applyChildRead(
+  state: ChildReadState,
+  ids: number[],
+  result: AzureDevOpsBoardChildren | null,
+  cardIds: Set<number>,
+): ChildReadState {
+  const cardLevel = ids.some((id) => cardIds.has(id));
+  const failed = result === null;
+  const truncated = Boolean(result?.truncated);
+  return {
+    byParent: mergeChildren(state.byParent, ids, result ?? { children: [] }),
+    failed: state.failed || failed,
+    truncated: state.truncated || truncated,
+    cardFailed: state.cardFailed || (cardLevel && failed),
+    cardTruncated: state.cardTruncated || (cardLevel && truncated),
+  };
+}
+
+/** Whether every card's own children were read, without a failed or truncated card read. */
 export function cardChildrenComplete(
   cardIds: number[],
   byParent: Map<number, AzureDevOpsChildCard[]>,

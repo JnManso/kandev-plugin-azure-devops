@@ -346,14 +346,41 @@ test("shows the cards before their children and says when children are unavailab
   await page.unroute("**/actions/boards.children");
 });
 
-const savedBoardPerson = (page: Page) =>
-  page.waitForResponse((response) => {
-    const request = response.request();
-    return request.method() !== "GET" && (request.postData() ?? "").includes('"personByBoard"') && response.ok();
-  });
+const BOARD_IDS: Record<string, string> = { Stories: "board-1", Features: "board-2" };
+const PERSON_VALUES: Record<string, string> = { "All people": "__any__", Unassigned: "__unassigned__" };
 
-async function chooseBoardPerson(page: Page, person: string) {
-  const saved = savedBoardPerson(page);
+/** The personByBoard map anywhere in a preference write's JSON body. */
+function personByBoardIn(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  if (record.personByBoard && typeof record.personByBoard === "object") return record.personByBoard as Record<string, string>;
+  for (const nested of Object.values(record)) {
+    const found = personByBoardIn(nested);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+/** Waits for the successful write that stores this person for this board. */
+const savedBoardPerson = (page: Page, board: string, person: string) => {
+  const suffix = `/${BOARD_IDS[board]}`;
+  const value = PERSON_VALUES[person] ?? person;
+  return page.waitForResponse((response) => {
+    const request = response.request();
+    if (request.method() === "GET" || !response.ok()) return false;
+    let body: unknown;
+    try {
+      body = JSON.parse(request.postData() ?? "");
+    } catch {
+      return false;
+    }
+    const stored = personByBoardIn(body);
+    return !!stored && Object.entries(stored).some(([key, saved]) => key.endsWith(suffix) && saved === value);
+  });
+};
+
+async function chooseBoardPerson(page: Page, board: string, person: string) {
+  const saved = savedBoardPerson(page, board, person);
   await choose(page, "azure-board-person-select", person);
   await saved;
 }
@@ -365,20 +392,20 @@ test("filters the board by person, matching a card or its direct children", asyn
   await expect(page.getByRole("option")).toHaveText(["All people", "Unassigned", "Ada Reviewer", "Bruno Costa"]);
   await page.keyboard.press("Escape");
 
-  await chooseBoardPerson(page, "Bruno Costa");
+  await chooseBoardPerson(page, "Stories", "Bruno Costa");
   await expect(page.getByTestId("azure-board-card-101")).toBeVisible();
   await expect(page.getByTestId("azure-board-children-toggle-101")).toHaveText("Task: 1/2");
   await page.getByTestId("azure-board-children-toggle-101").click();
   await expect(page.getByTestId("azure-board-children-101").locator('[data-testid^="azure-board-child-"]')).toHaveCount(2);
   await page.getByTestId("azure-board-children-toggle-101").click();
 
-  await chooseBoardPerson(page, "Unassigned");
+  await chooseBoardPerson(page, "Stories", "Unassigned");
   await expect(page.getByTestId("azure-board-card-101")).toHaveCount(0);
   await expect(page.getByTestId("azure-board-no-person-cards")).toHaveText("No cards on this board for this person.");
   await expect(page.getByTestId("azure-board-column-todo").getByText("0", { exact: true })).toBeVisible();
   await expect(page.getByTestId("azure-board-select")).toBeEnabled();
 
-  await chooseBoardPerson(page, "All people");
+  await chooseBoardPerson(page, "Stories", "All people");
   await expect(page.getByTestId("azure-board-card-101")).toBeVisible();
   await expect(page.getByTestId("azure-board-no-person-cards")).toHaveCount(0);
 });
@@ -390,12 +417,12 @@ test("lists the people of a board's cards and direct children, not grandchildren
   await expect(page.getByRole("option")).toHaveText(["All people", "Unassigned", "Ada Reviewer"]);
   await page.getByRole("option", { name: "Ada Reviewer" }).click();
   await expect(page.getByTestId("azure-board-card-102")).toBeVisible();
-  await chooseBoardPerson(page, "All people");
+  await chooseBoardPerson(page, "Features", "All people");
 });
 
 test("remembers the person filter per board after a reload", async ({ page }) => {
   await openBoard(page, "Stories");
-  await chooseBoardPerson(page, "Unassigned");
+  await chooseBoardPerson(page, "Stories", "Unassigned");
   await expect(page.getByTestId("azure-board-no-person-cards")).toBeVisible();
   await page.reload();
   await expect(page.getByTestId("azure-board-select")).toContainText("Stories");
@@ -408,7 +435,7 @@ test("remembers the person filter per board after a reload", async ({ page }) =>
   await expect(page.getByTestId("azure-board-card-102")).toBeVisible();
   await choose(page, "azure-board-select", "Stories");
   await expect(page.getByTestId("azure-board-person-select")).toContainText("Unassigned");
-  await chooseBoardPerson(page, "All people");
+  await chooseBoardPerson(page, "Stories", "All people");
   await expect(page.getByTestId("azure-board-card-101")).toBeVisible();
 });
 

@@ -138,5 +138,10 @@ Tasks 10 (person selector) and 11 (children index read for every card).
   no failed or truncated read); the E2E helper waits for the preference
   write's response. `board-children.test.ts` replaces the `childParentIds`
   case with 4 cases that failed before the change.
+- 2026-11-19, second review follow-up (PR #5): failed and truncated reads
+  are recorded per level (`applyChildRead`), so only card-level ones hold
+  the person fallback; deeper ones keep the existing notice. The E2E helper
+  waits for the write that stores the chosen person for that board. Two new
+  `board-children.test.ts` cases failed before the change.
 - Lifecycle evidence: not applicable; the change is a UI filter and touches no
   scheduling, background delivery, or task/session lifecycle.
