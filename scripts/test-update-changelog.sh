@@ -55,6 +55,35 @@ cat > "$test_dir/unreleased.expected" <<'EOF'
 EOF
 expect unreleased 1.1.0 "$test_dir/changes.txt"
 
+mkdir "$test_dir/escaped-unreleased"
+cat > "$test_dir/escaped-unreleased/CHANGELOG.md" <<'EOF'
+# Changelog
+
+## \[Unreleased\]
+
+### Fixed
+
+- An escaped heading note.
+
+## [1.0.0] - 2026-01-01
+
+- Older note.
+EOF
+cat > "$test_dir/escaped-unreleased.expected" <<'EOF'
+# Changelog
+
+## [1.0.1] - 2026-01-02
+
+### Fixed
+
+- An escaped heading note.
+
+## [1.0.0] - 2026-01-01
+
+- Older note.
+EOF
+expect escaped-unreleased 1.0.1 "$test_dir/changes.txt"
+
 mkdir "$test_dir/commits"
 cat > "$test_dir/commits/CHANGELOG.md" <<'EOF'
 # Changelog

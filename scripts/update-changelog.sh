@@ -36,7 +36,8 @@ awk -v version="$version" -v date="$date" -v changes="$changes" '
 function blank(line) { return line ~ /^[[:space:]]*$/ }
 NR == 1 { title = $0; next }
 /^## / {
-	unreleased = ($0 ~ /^## \[Unreleased\][[:space:]]*$/)
+	# Markdown may escape the brackets: "## \[Unreleased\]".
+	unreleased = ($0 ~ /^## \\?\[Unreleased\\?\][[:space:]]*$/)
 	if (unreleased) next
 }
 unreleased { notes[++n] = $0; next }
