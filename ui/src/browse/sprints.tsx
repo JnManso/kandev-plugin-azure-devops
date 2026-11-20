@@ -6,7 +6,7 @@ import { cn } from "../cn";
 import { useT } from "../i18n";
 import { SearchablePicker } from "./searchable-picker";
 import { useSprintOptions } from "./sprint-options";
-import { ANY_OPTION, UNASSIGNED_PERSON, filterRowsByPerson, sprintDateRange, tasksInColumn, teamPickerOptions } from "./sprints-model";
+import { filterRowsByPerson, personFilterOptions, sprintDateRange, tasksInColumn, teamPickerOptions } from "./sprints-model";
 import { WorkItemTaskActions } from "./task-actions";
 import type {
   AzureDevOpsActionPreset,
@@ -272,11 +272,7 @@ export function AzureDevOpsSprints({
   const sprintOptions = useSprintOptions(sprints.iterations);
   const people = sprints.board?.people ?? [];
   const personOptions = useMemo(
-    () => [
-      { id: ANY_OPTION, name: t("allPeople") },
-      { id: UNASSIGNED_PERSON, name: t("unassigned") },
-      ...people.map((name) => ({ id: name, name })),
-    ],
+    () => personFilterOptions(people, { all: t("allPeople"), unassigned: t("unassigned") }),
     [people, t],
   );
   const rows = useMemo(

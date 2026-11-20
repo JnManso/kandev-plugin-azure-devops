@@ -188,6 +188,7 @@
   "newWatchTitle": "Nova vigilância de {{kind}}",
   "nextBoardColumn": "Coluna seguinte do quadro",
   "nextPullRequestPage": "Página seguinte de pull requests",
+  "noBoardCardsForPerson": "Esta pessoa não tem cartões neste quadro.",
   "noComments": "Sem comentários.",
   "noDefaultProject": "Sem projeto predefinido",
   "noDescription": "Sem descrição.",

@@ -1,7 +1,7 @@
 import { currentHost, useEffect, useRef, useState } from "../runtime";
 import { createBrowseApi } from "./api";
 import { pickOption } from "./board-discovery";
-import { ANY_OPTION, UNASSIGNED_PERSON, defaultIterationId, teamPickerOptions } from "./sprints-model";
+import { ANY_OPTION, defaultIterationId, knownPerson, teamPickerOptions } from "./sprints-model";
 import type { AzureDevOpsSprintBoard } from "./types";
 import type { AzureDevOpsSprintsPreference } from "./use-preferences";
 import { useTeamList, useTeamSettings } from "./use-teams";
@@ -74,9 +74,7 @@ export function useAzureDevOpsSprints(
   useEffect(() => {
     const people = board.data?.people;
     if (!people) return;
-    setPerson((current) =>
-      current === ANY_OPTION || current === UNASSIGNED_PERSON || people.includes(current) ? current : ANY_OPTION,
-    );
+    setPerson((current) => knownPerson(current, people));
   }, [board.data]);
 
   return {

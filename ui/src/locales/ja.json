@@ -188,6 +188,7 @@
   "newWatchTitle": "新しい {{kind}} ウォッチ",
   "nextBoardColumn": "次のボード列",
   "nextPullRequestPage": "次のプルリクエストページ",
+  "noBoardCardsForPerson": "このボードにこの担当者のカードはありません。",
   "noComments": "コメントはありません。",
   "noDefaultProject": "既定のプロジェクトなし",
   "noDescription": "説明はありません。",

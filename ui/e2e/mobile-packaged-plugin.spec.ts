@@ -92,3 +92,25 @@ test("expands nested child lines on a phone without horizontal scrolling", async
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(1);
 });
+
+test("filters the board by person on a phone without horizontal scrolling", async ({ page }) => {
+  await page.goto("/azure-devops");
+  await page.getByTestId("azure-devops-board-mode").click();
+  await choose(page, "azure-board-team-select", "Platform Team");
+  await expect(page.getByTestId("azure-board-select")).toBeEnabled();
+  await choose(page, "azure-board-select", "Stories");
+  await expect(page.getByTestId("azure-board-children-toggle-101")).toBeVisible();
+  const selectors = await page.getByTestId("azure-board-selectors").boundingBox();
+  const person = await page.getByTestId("azure-board-person-select").boundingBox();
+  expect(person && selectors && person.width).toBeGreaterThan((selectors?.width ?? 0) - 2);
+
+  await choose(page, "azure-board-person-select", "Unassigned");
+  await expect(page.getByTestId("azure-board-no-person-cards")).toBeVisible();
+  await expect(page.getByTestId("azure-board-column-picker")).toHaveText(/To Do\s*0/);
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(overflow).toBeLessThanOrEqual(1);
+
+  await choose(page, "azure-board-person-select", "All people");
+  await expect(page.getByTestId("azure-board-card-101")).toBeVisible();
+  await expect(page.getByTestId("azure-board-column-picker")).toHaveText(/To Do\s*1/);
+});

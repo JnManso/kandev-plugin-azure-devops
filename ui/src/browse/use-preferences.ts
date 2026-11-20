@@ -31,6 +31,8 @@ export type AzureDevOpsBrowsePreference = {
   sprints?: AzureDevOpsSprintsPreference;
   /** Whether each board opens with its cards' children expanded. */
   expandChildren?: Record<string, boolean>;
+  /** The person filter of each board, by boardChildrenKey. */
+  personByBoard?: Record<string, string>;
 };
 
 type PagePreferenceState = {
@@ -101,6 +103,7 @@ export function useAzureDevOpsPagePreferences(
   const [teamByProject, setTeamByProject] = useState<Record<string, string>>({});
   const [sprints, setSprints] = useState<AzureDevOpsSprintsPreference>({});
   const [expandChildren, setExpandChildren] = useState<Record<string, boolean>>({});
+  const [personByBoard, setPersonByBoard] = useState<Record<string, string>>({});
   const initialized = useRef(false);
   const persisted = useRef("");
 
@@ -114,6 +117,7 @@ export function useAzureDevOpsPagePreferences(
     setTeamByProject(preference?.teamByProject ?? {});
     setSprints(preference?.sprints ?? {});
     setExpandChildren(preference?.expandChildren ?? {});
+    setPersonByBoard(preference?.personByBoard ?? {});
     persisted.current = JSON.stringify(preference ?? {});
     initialized.current = true;
     setHydrated(true);
@@ -129,12 +133,13 @@ export function useAzureDevOpsPagePreferences(
       teamByProject,
       sprints,
       expandChildren,
+      personByBoard,
     };
     const serialized = JSON.stringify(next);
     if (serialized === persisted.current) return;
     persisted.current = serialized;
     save(next);
-  }, [board, expandChildren, hydrated, save, sprints, state, teamByProject]);
+  }, [board, expandChildren, hydrated, personByBoard, save, sprints, state, teamByProject]);
 
   const rememberTeam = useCallback((projectId: string, teamId: string) => {
     if (!projectId || !teamId) return;
@@ -143,6 +148,10 @@ export function useAzureDevOpsPagePreferences(
 
   const rememberExpandChildren = useCallback((key: string, expand: boolean) => {
     setExpandChildren((current) => (current[key] === expand ? current : { ...current, [key]: expand }));
+  }, []);
+
+  const rememberBoardPerson = useCallback((key: string, person: string) => {
+    setPersonByBoard((current) => (current[key] === person ? current : { ...current, [key]: person }));
   }, []);
 
   return {
@@ -155,5 +164,7 @@ export function useAzureDevOpsPagePreferences(
     setSprints,
     expandChildren,
     rememberExpandChildren,
+    personByBoard,
+    rememberBoardPerson,
   };
 }

@@ -1,22 +1,24 @@
 import { currentHost, useCallback, useEffect, useMemo, useRef, useState } from "../runtime";
 import { createBrowseApi } from "./api";
-import { MAX_CHILD_PARENTS, childParentIds, mergeChildren, missingChildIds, replaceChildItem } from "./board-children";
+import { applyChildRead, cardChildrenComplete, nextChildReadIds, replaceChildItem, type ChildReadState } from "./board-children";
 import type { AzureDevOpsChildCard, AzureDevOpsWorkItem } from "./types";
 
-type ChildTree = {
-  scope: string;
-  byParent: Map<number, AzureDevOpsChildCard[]>;
-  failed: boolean;
-  truncated: boolean;
-};
+type ChildTree = ChildReadState & { scope: string };
 
-const emptyTree = (scope: string): ChildTree => ({ scope, byParent: new Map(), failed: false, truncated: false });
+const emptyTree = (scope: string): ChildTree => ({
+  scope,
+  byParent: new Map<number, AzureDevOpsChildCard[]>(),
+  failed: false,
+  truncated: false,
+  cardFailed: false,
+  cardTruncated: false,
+});
 
 /**
- * The children of the board's cards, read after the cards render, and of
- * each item shown under an expanded card or child, read when it is shown.
- * Every level is one request. A new set of cards starts over; moving a card
- * keeps what was read.
+ * The children of the board's cards, read after the cards render in batches
+ * the action accepts, and of each item shown under an expanded card or child,
+ * read when it is shown. A new set of cards starts over; moving a card keeps
+ * what was read.
  */
 export function useBoardChildren(
   workspaceId: string | undefined,
@@ -24,18 +26,15 @@ export function useBoardChildren(
   items: Array<{ id: number }> | undefined,
   expandedIds: number[],
 ) {
-  const parents = useMemo(() => childParentIds(items ?? []), [items]);
-  const scope = `${workspaceId ?? ""}|${projectId}|${parents.ids.join(",")}`;
+  const cardIds = useMemo(() => (items ?? []).map((item) => item.id), [items]);
+  const cardSet = useMemo(() => new Set(cardIds), [cardIds]);
+  const scope = `${workspaceId ?? ""}|${projectId}|${cardIds.join(",")}`;
   const [tree, setTree] = useState<ChildTree>(() => emptyTree(scope));
   const requested = useRef({ scope, ids: new Set<number>() });
   const current = tree.scope === scope ? tree : emptyTree(scope);
   if (requested.current.scope !== scope) requested.current = { scope, ids: new Set() };
 
-  const missing =
-    current.byParent.size === 0 && !current.failed
-      ? parents.ids.filter((id) => !requested.current.ids.has(id))
-      : missingChildIds(expandedIds, current.byParent, requested.current.ids);
-  const missingKey = missing.slice(0, MAX_CHILD_PARENTS).join(",");
+  const missingKey = nextChildReadIds(cardIds, expandedIds, current.byParent, requested.current.ids).join(",");
 
   useEffect(() => {
     if (!workspaceId || !projectId || !missingKey) return;
@@ -46,27 +45,17 @@ export function useBoardChildren(
       .filter((id) => !owner.ids.has(id));
     if (ids.length === 0) return;
     for (const id of ids) owner.ids.add(id);
+    const apply = (result: Parameters<typeof applyChildRead>[2]) =>
+      setTree((previous) => {
+        if (requested.current !== owner) return previous;
+        const base = previous.scope === scope ? previous : emptyTree(scope);
+        return { ...applyChildRead(base, ids, result, cardSet), scope };
+      });
     createBrowseApi(currentHost(), workspaceId)
       .boardChildren(projectId, ids)
-      .then((result) =>
-        setTree((previous) => {
-          const base = previous.scope === scope ? previous : emptyTree(scope);
-          if (requested.current !== owner) return previous;
-          return {
-            ...base,
-            byParent: mergeChildren(base.byParent, ids, result),
-            truncated: base.truncated || Boolean(result.truncated),
-          };
-        }),
-      )
-      .catch(() =>
-        setTree((previous) => {
-          if (requested.current !== owner) return previous;
-          const base = previous.scope === scope ? previous : emptyTree(scope);
-          return { ...base, byParent: mergeChildren(base.byParent, ids, { children: [] }), failed: true };
-        }),
-      );
-  }, [missingKey, projectId, scope, workspaceId]);
+      .then(apply)
+      .catch(() => apply(null));
+  }, [cardSet, missingKey, projectId, scope, workspaceId]);
 
   const mergeChild = useCallback(
     (item: AzureDevOpsWorkItem) =>
@@ -78,8 +67,10 @@ export function useBoardChildren(
 
   return {
     byParent: current.byParent,
+    /** Whether every card's own children were read in full (no failed or truncated card read). */
+    complete: cardChildrenComplete(cardIds, current.byParent, current.cardFailed, current.cardTruncated),
     failed: current.failed,
-    truncated: parents.truncated || current.truncated,
+    truncated: current.truncated,
     mergeChild,
   };
 }

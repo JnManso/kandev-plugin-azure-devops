@@ -95,9 +95,28 @@ export function iterationTimeFrameKey(timeFrame: string | undefined): string | u
   }
 }
 
-function assignedTo(item: AzureDevOpsWorkItem, person: string): boolean {
+/** Whether the item's trimmed assignee is the person; UNASSIGNED_PERSON matches none. */
+export function isAssignedTo(item: { assignedTo?: string }, person: string): boolean {
   const assignee = item.assignedTo?.trim() ?? "";
   return person === UNASSIGNED_PERSON ? assignee === "" : assignee === person;
+}
+
+/** Person filter options, shared by Sprints and the Board: all, unassigned, then each person. */
+export function personFilterOptions(
+  people: string[],
+  labels: { all: string; unassigned: string },
+): Array<{ id: string; name: string }> {
+  return [
+    { id: ANY_OPTION, name: labels.all },
+    { id: UNASSIGNED_PERSON, name: labels.unassigned },
+    ...people.map((name) => ({ id: name, name })),
+  ];
+}
+
+/** The selected person while the list names them, else ANY_OPTION. */
+export function knownPerson(person: string | undefined, people: string[]): string {
+  if (person === ANY_OPTION || person === UNASSIGNED_PERSON) return person;
+  return person && people.includes(person) ? person : ANY_OPTION;
 }
 
 /**
@@ -107,8 +126,8 @@ function assignedTo(item: AzureDevOpsWorkItem, person: string): boolean {
 export function filterRowsByPerson(rows: AzureDevOpsSprintRow[], person: string): AzureDevOpsSprintRow[] {
   if (!person || person === ANY_OPTION) return rows;
   return rows.flatMap((row) => {
-    const tasks = row.tasks.filter((task) => assignedTo(task, person));
-    const parentMatches = row.parent ? assignedTo(row.parent, person) : false;
+    const tasks = row.tasks.filter((task) => isAssignedTo(task, person));
+    const parentMatches = row.parent ? isAssignedTo(row.parent, person) : false;
     return tasks.length > 0 || parentMatches ? [{ ...row, tasks }] : [];
   });
 }

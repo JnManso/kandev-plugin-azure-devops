@@ -6,6 +6,7 @@ owners:
   - kandev
 requirements:
   - REQ-INTEGRATIONS-AZURE-DEVOPS-PLUGIN-CHILDREN-001
+  - REQ-INTEGRATIONS-AZURE-DEVOPS-PLUGIN-CHILDREN-002
 ---
 
 # Azure DevOps Plugin Board Card Children System Design
@@ -23,6 +24,7 @@ contract changes.
 | Requirement | Design section |
 | --- | --- |
 | `REQ-INTEGRATIONS-AZURE-DEVOPS-PLUGIN-CHILDREN-001` | [Azure DevOps calls and action](#azure-devops-calls-and-action), [Board UI](#board-ui) |
+| `REQ-INTEGRATIONS-AZURE-DEVOPS-PLUGIN-CHILDREN-002` | [Person filter](#person-filter) |
 
 ## Azure DevOps calls and action
 
@@ -54,8 +56,9 @@ categories from a per-type map.
 The Board requests `boards.children` with the snapshot's card IDs after the
 snapshot renders, so the counts never delay the cards; a new set of cards
 requests them again (moving a card does not), and a stale request is aborted.
-The UI sends at most 1,000 card IDs, which `boards.children` enforces, and
-reports `truncated` itself beyond that. A card with children shows a toggle in
+The UI reads the card level in batches of at most 1,000 card IDs, which
+`boards.children` enforces, so every card's children are read on larger
+boards. A card with children shows a toggle in
 its footer, `{type}: {done}/{total}` when all children share a work-item type
 and the localized "Child items: {done}/{total}" otherwise. The toggle and
 the child lines stop pointer and keyboard events, so they never open or drag
@@ -82,6 +85,46 @@ Failure handling: when `boards.children` fails, cards render without
 toggles and an inline notice says the child items are unavailable; when it
 reports `truncated`, the notice says some child items are not shown.
 
+## Person filter
+
+The person filter runs in the UI on data the Board already reads: the
+snapshot's cards and the first level of the children index, which is read for
+every card after the snapshot renders. It adds no action and no Azure DevOps
+call.
+
+The Sprints model (`sprints-model.ts`) owns the shared pieces:
+`ANY_OPTION` (**All people**), `UNASSIGNED_PERSON`, `isAssignedTo` (trimmed
+display name; empty means unassigned), `personFilterOptions` (the option list
+both selectors render), and `knownPerson` (the selected person while the list
+names them, else `ANY_OPTION`). The Board adds `board-people.ts`:
+
+- `boardPeople(cards, byParent)` lists every assignee of a card or of a
+  card's direct child once, ordered by name like `SprintPeople` on the
+  server.
+- `filterCardsByPerson(cards, byParent, person)` keeps a card when the card or
+  one of its direct children is assigned to the person. Grandchildren never
+  count, so the result does not depend on which lines are expanded.
+
+`board.tsx` filters the snapshot's cards before grouping them into columns,
+so column badges and the phone column navigator count the cards shown. The
+children index is still read for every card, so the people list and the
+filter see children of hidden cards. An expanded card lists all its children
+and its done/total count is unchanged. Expand all and its label consider the
+cards shown. When cards exist and none matches, the Board shows "No cards on
+this board for this person." under the selectors.
+
+The person is stored per board in the browse preference as
+`personByBoard: Record<boardChildrenKey, person>`, beside `expandChildren`,
+and written only when the user picks a person. The selector shows
+`knownPerson(stored, people)` once the board's first child level is complete
+(every card read, and no card-level read failed or was truncated by the
+1,000-child bound; failed or truncated reads of deeper levels keep their
+notice but do not hold the fallback); until then it shows and lists the stored person, so a person found
+only on children is not dropped while the children load or when some of them
+cannot be read. A remembered person missing from the board therefore shows **All
+people** without overwriting the stored value. On a phone the Board
+selectors stack full width, as in Sprints.
+
 ## Testing
 
 - Unit: link-query chunking, `Removed` filtering, backlog ordering, done
@@ -91,3 +134,10 @@ reports `truncated`, the notice says some child items are not shown.
 - Packaged E2E on desktop and phone: counts, expand and collapse, child detail
   and task actions without opening the card, expand all remembered after a
   reload, cards shown while children are delayed.
+- Person filter unit tests (`board-people.test.ts`, `sprints-model.test.ts`):
+  people of cards and direct children, filtering by a card or a direct
+  child, grandchildren ignored, **Unassigned**, the shared option list, and
+  the fallback for a missing person.
+- Packaged E2E: the person options, filtering by a child's assignee and by
+  **Unassigned**, the empty state, the person remembered per board after a
+  reload, and the phone layout without horizontal scrolling.

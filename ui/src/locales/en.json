@@ -188,6 +188,7 @@
   "newWatchTitle": "New {{kind}} watch",
   "nextBoardColumn": "Next board column",
   "nextPullRequestPage": "Next pull request page",
+  "noBoardCardsForPerson": "No cards on this board for this person.",
   "noComments": "No comments.",
   "noDefaultProject": "No default project",
   "noDescription": "No description.",

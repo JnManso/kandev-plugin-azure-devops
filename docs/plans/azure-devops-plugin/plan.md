@@ -11,6 +11,7 @@ requirements:
   - REQ-INTEGRATIONS-AZURE-DEVOPS-PLUGIN-007
   - REQ-INTEGRATIONS-AZURE-DEVOPS-PLUGIN-SPRINTS-001
   - REQ-INTEGRATIONS-AZURE-DEVOPS-PLUGIN-CHILDREN-001
+  - REQ-INTEGRATIONS-AZURE-DEVOPS-PLUGIN-CHILDREN-002
 system_design:
   - ../../specs/system-design/azure-devops-plugin.md
   - ../../specs/system-design/azure-devops-plugin-sprints.md
@@ -24,7 +25,7 @@ system_design:
 This repository owns the Azure DevOps connector plugin that replaces Kandev's
 first-party integration. It reaches parity with the built-in integration and
 adds Microsoft account sign-in (ported from the closed kdlbs/kandev#4915),
-teams and sprints, and board card children.
+teams and sprints, board card children, and the Board person filter.
 
 The Kandev side of the extraction is planned separately, in the
 [Kandev extraction plan](https://github.com/kdlbs/kandev/blob/main/docs/plans/azure-devops-plugin-extraction/plan.md).
@@ -78,6 +79,8 @@ follows its merge.
   work-item Team and Sprint filters, and the read-only Sprints taskboard.
 - **Board card children (task 11):** child counts, nested expansion down to
   tasks, and child actions on board cards.
+- **Board person filter (task 12):** the Sprints person selector on the
+  Board, matching cards or their direct children, remembered per board.
 
 ### Executor compatibility matrix
 
@@ -195,10 +198,11 @@ UI-05: Sprints mode on a phone (AC-INTEGRATIONS-AZURE-DEVOPS-PLUGIN-SPRINTS-001.
 
 UI-06: Board card children. Desktop. Browse > Board, Features board
 (AC-INTEGRATIONS-AZURE-DEVOPS-PLUGIN-CHILDREN-001.1 to 001.4, 001.6). The
-phone shows the same card inside the column navigator (001.5).
+phone shows the same card inside the column navigator (001.5). The person
+selector follows the board selector (CHILDREN-002.1 to 002.3).
 
 ```text
-| [Contoso v] [Offers v] [Features v]                [Expand all]   |
+| [Contoso v] [Offers v] [Features v] [Person: All v] [Expand all]  |
 | New                              2 | Active                         |
 | +--------------------------------+ |                                |
 | | :: Execution Details           | |                                |
@@ -217,6 +221,24 @@ phone shows the same card inside the column navigator (001.5).
 | +--------------------------------+ |                                |
 ```
 
+UI-07: Board person filter on a phone (AC-INTEGRATIONS-AZURE-DEVOPS-PLUGIN-CHILDREN-002.4).
+
+```text
++------------------------------+
+| [Platform                 v] |
+| [Platform Team            v] |
+| [Stories                  v] |
+| [Bruno Costa              v] |
+| [Expand all]                 |
+| [<] [ To Do     1  =] [>]    |
+| +--------------------------+ |
+| | Handle token rotation    | |
+| | #101 User Story  Ada ... | |
+| | > Task: 1/2              | |
+| +--------------------------+ |
++------------------------------+
+```
+
 ## Tests
 
 | Acceptance criteria | Evidence |
@@ -229,6 +251,7 @@ phone shows the same card inside the column navigator (001.5).
 | PLUGIN-007 | `internal/watches/*_test.go` |
 | PLUGIN-SPRINTS-001 | `internal/azure/sprints_test.go`, `internal/plugin/actions_browse_test.go`; `ui/src/browse/sprint-board.test.ts`, `search-query.test.ts` |
 | PLUGIN-CHILDREN-001 | `internal/azure/children_test.go`, `rest_client_children_test.go`, `internal/plugin/browse_children_test.go`; `ui/src/browse/board-children.test.ts` |
+| PLUGIN-CHILDREN-002 | `ui/src/browse/board-people.test.ts`, `sprints-model.test.ts` |
 
 ## E2E tests
 
@@ -241,6 +264,7 @@ phone shows the same card inside the column navigator (001.5).
 | Watch creates one task; disabled reason | PLUGIN-007 | same files |
 | My teams first; Team and Sprint filters; Sprints taskboard, person filter, collapse, empty states | PLUGIN-SPRINTS-001 | same files |
 | Board card child counts, expand and collapse, child detail and task actions, expand all remembered, unavailable notice | PLUGIN-CHILDREN-001 | same files |
+| Board person filter options, matching by child, Unassigned, empty state, remembered per board, phone layout | PLUGIN-CHILDREN-002 | same files |
 
 ## Work orders
 
@@ -253,6 +277,7 @@ phone shows the same card inside the column navigator (001.5).
 - [ ] [Task 07: Packaged E2E and release](task-07-plugin-release.md)
 - [ ] [Task 10: Teams and sprints](task-10-plugin-teams-sprints.md)
 - [x] [Task 11: Board card children](task-11-plugin-board-children.md)
+- [x] [Task 12: Board person filter](task-12-plugin-board-person-filter.md)
 
 ## Risks
 

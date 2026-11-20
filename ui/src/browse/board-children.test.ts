@@ -1,13 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   MAX_CHILD_PARENTS,
-  childParentIds,
+  applyChildRead,
+  cardChildrenComplete,
   childSummary,
   childrenByParent,
   everyCardExpanded,
   isCardExpanded,
   mergeChildren,
   missingChildIds,
+  nextChildReadIds,
   replaceChildItem,
 } from "./board-children";
 import type { AzureDevOpsChildCard } from "./types";
@@ -39,13 +41,64 @@ describe("childSummary", () => {
   });
 });
 
-describe("childParentIds", () => {
-  it("bounds the cards whose children are read", () => {
-    const items = Array.from({ length: MAX_CHILD_PARENTS + 2 }, (_, index) => ({ id: index + 1 }));
-    const bounded = childParentIds(items);
-    expect(bounded.ids).toHaveLength(MAX_CHILD_PARENTS);
-    expect(bounded.truncated).toBe(true);
-    expect(childParentIds([{ id: 7 }, { id: 3 }])).toEqual({ ids: [7, 3], truncated: false });
+describe("nextChildReadIds", () => {
+  const cards = (count: number) => Array.from({ length: count }, (_, index) => index + 1);
+
+  it("reads the cards in batches the action accepts, every card once", () => {
+    const ids = cards(MAX_CHILD_PARENTS + 2);
+    const requested = new Set<number>();
+    const first = nextChildReadIds(ids, [], new Map(), requested);
+    expect(first).toEqual(ids.slice(0, MAX_CHILD_PARENTS));
+    first.forEach((id) => requested.add(id));
+    expect(nextChildReadIds(ids, [], new Map(), requested)).toEqual([MAX_CHILD_PARENTS + 1, MAX_CHILD_PARENTS + 2]);
+    ids.forEach((id) => requested.add(id));
+    expect(nextChildReadIds(ids, [], new Map(), requested)).toEqual([]);
+  });
+
+  it("reads the items under expanded nodes once every card was requested", () => {
+    const byParent = new Map([[1, [child(11, "Task"), child(12, "Task")]]]);
+    expect(nextChildReadIds([1, 2], [1], byParent, new Set([1]))).toEqual([2]);
+    expect(nextChildReadIds([1, 2], [1], byParent, new Set([1, 2, 12]))).toEqual([11]);
+  });
+});
+
+describe("cardChildrenComplete", () => {
+  const read = new Map([
+    [1, [child(11, "Task")]],
+    [2, []],
+  ]);
+
+  it("is complete when every card's children were read in full", () => {
+    expect(cardChildrenComplete([1, 2], read, false, false)).toBe(true);
+    expect(cardChildrenComplete([], new Map(), false, false)).toBe(true);
+  });
+
+  it("is incomplete while a card was not read, or when a read failed or was truncated", () => {
+    expect(cardChildrenComplete([1, 2, 3], read, false, false)).toBe(false);
+    expect(cardChildrenComplete([1, 2], read, true, false)).toBe(false);
+    expect(cardChildrenComplete([1, 2], read, false, true)).toBe(false);
+  });
+});
+
+describe("applyChildRead", () => {
+  const empty = { byParent: new Map(), failed: false, truncated: false, cardFailed: false, cardTruncated: false };
+  const cards = new Set([1, 2]);
+
+  it("records a failed or truncated card read at the card level", () => {
+    const failed = applyChildRead(empty, [1, 2], null, cards);
+    expect(failed).toMatchObject({ failed: true, cardFailed: true });
+    expect(failed.byParent.get(1)).toEqual([]);
+    const truncated = applyChildRead(empty, [1, 2], { children: [], truncated: true }, cards);
+    expect(truncated).toMatchObject({ truncated: true, cardTruncated: true });
+  });
+
+  it("keeps a failed or truncated deeper read out of the card level", () => {
+    const read = applyChildRead(empty, [1, 2], { children: [{ parentId: 1, items: [child(11, "Task")] }] }, cards);
+    const failed = applyChildRead(read, [11], null, cards);
+    expect(failed).toMatchObject({ failed: true, cardFailed: false });
+    const truncated = applyChildRead(read, [11], { children: [], truncated: true }, cards);
+    expect(truncated).toMatchObject({ truncated: true, cardTruncated: false });
+    expect(cardChildrenComplete([1, 2], failed.byParent, failed.cardFailed, failed.cardTruncated)).toBe(true);
   });
 });
 

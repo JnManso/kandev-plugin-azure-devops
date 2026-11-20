@@ -188,6 +188,7 @@
   "newWatchTitle": "新建{{kind}}监控",
   "nextBoardColumn": "下一看板列",
   "nextPullRequestPage": "下一页拉取请求",
+  "noBoardCardsForPerson": "此人员在此看板上没有卡片。",
   "noComments": "暂无评论。",
   "noDefaultProject": "无默认项目",
   "noDescription": "暂无描述。",
