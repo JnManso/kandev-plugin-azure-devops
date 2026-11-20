@@ -202,6 +202,10 @@ packaging. The release workflow accepts a manual version bump from `main` or a
 pushed `vX.Y.Z` tag. Both paths run the same checks, then publish the package
 and its `checksums.txt` to a GitHub release.
 
+Write user-facing notes under `## [Unreleased]` in `CHANGELOG.md` as changes
+land. A manual release turns that section into the new version's section; with
+no Unreleased notes, it lists the commits since the previous tag instead.
+
 ## License
 
 GNU Affero General Public License, version 3 only (AGPL-3.0-only), the same

@@ -165,20 +165,11 @@ jobs:
           sed -i -E "s/^version: \"[0-9]+\.[0-9]+\.[0-9]+\"$/version: \"$VERSION\"/" manifest.yaml
           sed -i -E "s/^VERSION := [0-9]+\.[0-9]+\.[0-9]+$/VERSION := $VERSION/" Makefile
 
+          # Curated notes under "## [Unreleased]" become the release section;
+          # without them the section lists the commits since the last tag.
           if [ -n "$PREVIOUS_TAG" ]; then RANGE="$PREVIOUS_TAG..HEAD"; else RANGE=HEAD; fi
-          CHANGES="$(git log --no-merges --format='- %s (%h)' "$RANGE")"
-          test -n "$CHANGES" || CHANGES="- Initial release"
-          {
-            echo "# Changelog"
-            echo
-            printf '## [%s] - %s\n\n' "$VERSION" "$(date -u +%F)"
-            echo "### Changed"
-            echo
-            printf '%s\n' "$CHANGES"
-            echo
-            test ! -f CHANGELOG.md || tail -n +2 CHANGELOG.md
-          } > CHANGELOG.md.next
-          mv CHANGELOG.md.next CHANGELOG.md
+          git log --no-merges --format='- %s (%h)' "$RANGE" > "$RUNNER_TEMP/release-changes.txt"
+          sh scripts/update-changelog.sh "$VERSION" "$(date -u +%F)" "$RUNNER_TEMP/release-changes.txt"
 
       - name: Validate release identity
         if: ${{ !inputs.dry_run }}

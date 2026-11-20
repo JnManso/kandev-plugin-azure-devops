@@ -1,4 +1,4 @@
-.PHONY: build build-ui run test test-go test-ui test-package-verifier test-release-version \
+.PHONY: build build-ui run test test-go test-ui test-package-verifier test-release-version test-changelog \
 	audit fmt check-format vet package package-host package-file verify-package \
 	verify-package-host e2e clean
 
@@ -28,7 +28,7 @@ build-ui:
 run: build
 	./$(BIN)
 
-test: test-go test-ui test-package-verifier test-release-version
+test: test-go test-ui test-package-verifier test-release-version test-changelog
 
 test-go:
 	go test ./...
@@ -41,6 +41,9 @@ test-package-verifier:
 
 test-release-version:
 	sh scripts/test-verify-release-version.sh
+
+test-changelog:
+	sh scripts/test-update-changelog.sh
 
 audit:
 	npm audit --audit-level=high
