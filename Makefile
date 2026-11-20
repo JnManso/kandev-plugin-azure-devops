@@ -5,7 +5,7 @@
 # Keep these values synchronized with manifest.yaml (server/manifest_test.go
 # enforces it).
 BIN := bin/kandev-plugin-azure-devops
-VERSION := 0.1.1
+VERSION := 0.2.0
 STAGE := .build/stage
 PKG_OUT := $(notdir $(BIN))-$(VERSION).tar.gz
 

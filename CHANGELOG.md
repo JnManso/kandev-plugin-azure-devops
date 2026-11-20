@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.0] - 2026-11-20
+
+### Changed
+
+- fix(board): keep deeper child reads out of the person fallback (5fe38b8)
+- fix(board): read every card's children before trusting the person filter (e60666a)
+- feat(board): filter the board by person (62cc188)
+
+
 ## [Unreleased]
 
 ### Added

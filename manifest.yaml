@@ -3,7 +3,7 @@
 # window.registerKandevPlugin in ui/src/bundle.ts, and the Makefile BIN name.
 id: "kandev-plugin-azure-devops"
 api_version: 2
-version: "0.1.1"
+version: "0.2.0"
 # The first Kandev release without the built-in Azure DevOps integration.
 min_kandev_version: "0.102.0"
 display_name: "Azure DevOps"
