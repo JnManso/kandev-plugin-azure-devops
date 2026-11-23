@@ -5,9 +5,11 @@ delivered as a runtime plugin.
 
 ## Status
 
-Released as 0.1.0 for Kandev 0.102.0 and later, the first Kandev release
-without the built-in Azure DevOps integration. Install it from the plugin
-catalog in **Settings > Plugins**.
+Released for Kandev 0.102.0 and later, the first Kandev release without the
+built-in Azure DevOps integration. Install it from the plugin catalog in
+**Settings > Plugins**; each version's package is on the
+[releases page](https://github.com/JnManso/kandev-plugin-azure-devops/releases)
+and its changes are in [CHANGELOG.md](CHANGELOG.md).
 
 - **Connection:** Settings > Integrations > Azure DevOps connects a workspace
   with a Personal Access Token or a Microsoft account. It tests the
@@ -139,7 +141,7 @@ internal/sourcecontrol/     provider-neutral repository, review, and reference b
 ui/src/                     frontend sources, bundled to ui/bundle.js by esbuild
 ui/e2e/                     packaged-host Playwright suite (desktop and phone)
 assets/                     marketplace icon and its notice
-scripts/                    package and release verifiers
+scripts/                    package and release verifiers, changelog update
 docs/specs/                 product requirements and system designs
 docs/plans/                 implementation plan and work orders
 ```
@@ -150,7 +152,7 @@ Requires Go 1.26 and Node 20.19 or 22.12 and later.
 
 ```sh
 npm ci
-make test          # Go tests, UI typecheck/build/tests, verifier tests
+make test          # Go tests, UI typecheck/build/tests, release script tests
 make check-format vet
 make audit         # npm audit --audit-level=high
 ```
@@ -187,7 +189,7 @@ Install through **Settings > Plugins > Install plugin** (file upload or URL),
 or with the API:
 
 ```sh
-curl -F package=@kandev-plugin-azure-devops-0.1.0.tar.gz \
+curl -F package=@kandev-plugin-azure-devops-<version>.tar.gz \
   http://localhost:<kandev-port>/api/plugins/install
 ```
 
@@ -201,6 +203,12 @@ Pull requests run CI (tidy, format, vet, tests, audit) and full platform
 packaging. The release workflow accepts a manual version bump from `main` or a
 pushed `vX.Y.Z` tag. Both paths run the same checks, then publish the package
 and its `checksums.txt` to a GitHub release.
+
+Write user-facing notes under `## [Unreleased]` in `CHANGELOG.md` as changes
+land. A manual release turns that section into the new version's section; with
+no Unreleased notes, it lists the commits since the previous tag instead. A
+pushed tag publishes the tagged commit as is, so update `CHANGELOG.md`,
+`manifest.yaml`, and the `Makefile` version before tagging.
 
 ## License
 
